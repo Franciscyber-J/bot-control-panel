@@ -32,7 +32,14 @@ const sshConfig = {
 async function executeRemoteCommand(command) {
     try {
         await ssh.connect(sshConfig);
-        const result = await ssh.execCommand(command, { cwd: '/root' });
+        
+        // #################### INÍCIO DA CORREÇÃO ####################
+        // ARQUITETO: Usamos o caminho absoluto para o PM2, fornecido por si, para garantir a execução.
+        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+        const fullCommand = `${pm2Path} ${command}`;
+        // ##################### FIM DA CORREÇÃO ######################
+
+        const result = await ssh.execCommand(fullCommand, { cwd: '/root' });
         ssh.dispose();
         if (result.code !== 0) {
             throw new Error(result.stderr);
@@ -51,7 +58,7 @@ async function executeRemoteCommand(command) {
 // --- Rotas da API ---
 app.get('/api/bots/status', auth, async (req, res) => {
     try {
-        const result = await executeRemoteCommand('pm2 jlist');
+        const result = await executeRemoteCommand('jlist');
         res.json(JSON.parse(result));
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -64,7 +71,7 @@ app.post('/api/bots/manage', auth, async (req, res) => {
         return res.status(400).json({ error: 'Ação ou nome inválido.' });
     }
     try {
-        const result = await executeRemoteCommand(`pm2 ${action} ${name}`);
+        const result = await executeRemoteCommand(`${action} ${name}`);
         res.json({ message: `Ação '${action}' executada com sucesso para '${name}'.`, output: result });
     } catch (error) {
         res.status(500).json({ error: error.message });
