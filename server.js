@@ -34,19 +34,22 @@ async function executeRemoteCommand(command) {
         await ssh.connect(sshConfig);
         
         // #################### INÍCIO DA CORREÇÃO ####################
-        // ARQUITETO: Usamos o caminho absoluto para o PM2, fornecido por si, para garantir a execução.
+        // ARQUITETO: Definimos o caminho completo para o Node.js e para o PM2.
+        // O comando agora executa o 'node' e passa o script do 'pm2' como argumento.
+        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
         const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const fullCommand = `${pm2Path} ${command}`;
+        const fullCommand = `${nodePath} ${pm2Path} ${command}`;
         // ##################### FIM DA CORREÇÃO ######################
 
         const result = await ssh.execCommand(fullCommand, { cwd: '/root' });
         ssh.dispose();
         if (result.code !== 0) {
-            throw new Error(result.stderr);
+            // Se houver erro, o stderr é mais informativo
+            throw new Error(result.stderr || 'O comando falhou sem uma saída de erro específica.');
         }
         return result.stdout;
     } catch (error) {
-        console.error("Erro SSH:", error);
+        console.error("Erro SSH:", error.message);
         // Garante que a conexão seja fechada em caso de erro
         if (ssh.connection) {
             ssh.dispose();
