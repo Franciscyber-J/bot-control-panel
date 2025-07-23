@@ -1,0 +1,10 @@
+# Ficheiro de variáveis de ambiente - NUNCA ENVIAR!
+.env
+
+# Dependências do Node.js
+/node_modules
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

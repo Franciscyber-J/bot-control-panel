@@ -1,0 +1,16 @@
+{
+  "name": "bot-control-panel",
+  "version": "1.0.0",
+  "description": "Painel para gerir múltiplos bots via PM2",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "basic-auth": "^2.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-ssh": "^13.2.0"
+  }
+}
