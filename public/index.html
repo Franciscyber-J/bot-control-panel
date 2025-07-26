@@ -1,27 +1,80 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
-<head>
+<html lang="pt-BR" class="dark"> <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bot Control Panel</title>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Bot Control Panel</h1>
+        <header class="panel-header">
+            <h1>Bot Control Panel</h1>
+            <div class="controls-container">
+                 <button id="theme-toggle" title="Alterar tema">
+                    <i data-feather="sun" class="icon-sun"></i>
+                    <i data-feather="moon" class="icon-moon"></i>
+                </button>
+            </div>
+        </header>
+
         <div id="bot-list" class="bot-list-grid">
             <p>A carregar status dos bots...</p>
         </div>
+
+        <footer class="panel-footer">
+            <p>Status será atualizado automaticamente em <span id="countdown">30</span>s. Última verificação: <span id="last-updated">Nunca</span></p>
+        </footer>
     </div>
 
     <script>
         const botListContainer = document.getElementById('bot-list');
+        const countdownElement = document.getElementById('countdown');
+        const lastUpdatedElement = document.getElementById('last-updated');
+        const themeToggleButton = document.getElementById('theme-toggle');
+        const REFRESH_INTERVAL = 30; // Segundos
+        let countdown = REFRESH_INTERVAL;
+        let refreshTimer;
+
+        // --- Gestão de Tema (Dark/Light Mode) ---
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+            } else {
+                document.documentElement.classList.add('light');
+                document.documentElement.classList.remove('dark');
+            }
+            // Inicializa os ícones Feather
+            feather.replace();
+        }
+
+        themeToggleButton.addEventListener('click', () => {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        });
+
+        // Aplica o tema guardado ao carregar a página
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            applyTheme(savedTheme);
+        });
+
+        // --- Lógica da API e Renderização ---
 
         async function fetchWithAuth(url, options = {}) {
+            // A função original permanece a mesma
             const response = await fetch(url, options);
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Falha na requisição');
+                // Interrompe o auto-refresh em caso de falha de autenticação
+                if (response.status === 401) {
+                    clearInterval(refreshTimer);
+                    document.body.innerHTML = `<div class="container"><p class="error">Erro de Autenticação. Por favor, atualize a página e insira as credenciais corretas.</p></div>`;
+                }
+                const errorData = await response.json().catch(() => ({ error: 'Falha na requisição. Verifique a conexão e o status do servidor.' }));
+                throw new Error(errorData.error);
             }
             return response.json();
         }
@@ -35,7 +88,7 @@
                     body: JSON.stringify({ name, action })
                 });
                 alert(result.message);
-                loadBots();
+                loadBots(); // Recarrega imediatamente após uma ação
             } catch (error) {
                 alert(`Erro: ${error.message}`);
             }
@@ -53,7 +106,7 @@
                         <span class="status-dot ${statusClass}" title="${bot.pm2_env.status}"></span>
                     </div>
                     <div class="bot-info">
-                        <p><strong>Status:</strong> ${bot.pm2_env.status}</p>
+                        <p><strong>Status:</strong> <span class="status-text ${statusClass}">${bot.pm2_env.status}</span></p>
                         <p><strong>CPU:</strong> ${bot.monit.cpu}%</p>
                         <p><strong>Memória:</strong> ${memory} MB</p>
                         <p><strong>Restarts:</strong> ${bot.pm2_env.restart_time}</p>
@@ -68,17 +121,35 @@
         }
 
         async function loadBots() {
-            botListContainer.innerHTML = '<p>A carregar status dos bots...</p>';
+            console.log('A carregar status dos bots...');
             try {
                 const bots = await fetchWithAuth('/api/bots/status');
                 if (bots.length > 0) {
                     botListContainer.innerHTML = bots.map(renderBot).join('');
                 } else {
-                    botListContainer.innerHTML = '<p>Nenhum bot encontrado.</p>';
+                    botListContainer.innerHTML = '<div class="bot-card"><p>Nenhum bot encontrado ou gerido pelo PM2.</p></div>';
                 }
+                // Atualiza a informação do rodapé
+                lastUpdatedElement.textContent = new Date().toLocaleTimeString();
             } catch (error) {
-                botListContainer.innerHTML = `<p class="error">Erro ao carregar bots: ${error.message}</p>`;
+                botListContainer.innerHTML = `<div class="bot-card error-card"><p class="error">Erro ao carregar bots: ${error.message}</p></div>`;
             }
+            // Reinicia a contagem para a próxima atualização
+            resetCountdown();
+        }
+
+        // --- Lógica de Auto-Refresh ---
+        function resetCountdown() {
+            clearInterval(refreshTimer);
+            countdown = REFRESH_INTERVAL;
+            countdownElement.textContent = countdown;
+            refreshTimer = setInterval(() => {
+                countdown--;
+                countdownElement.textContent = countdown;
+                if (countdown <= 0) {
+                    loadBots();
+                }
+            }, 1000);
         }
 
         // Carregamento inicial
