@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BCP :: Neural Interface</title>
+    <title>Painel de Controlo de Bots</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%2300FFFF' d='M20 10 H80 V20 H30 V80 H20 V10 Z M40 30 H90 V40 H50 V90 H40 V30 Z' /%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="scanlines"></div>
     <div class="container">
         <header class="panel-header">
-            <h1 class="glitch" data-text="Bot Control Panel">Bot Control Panel</h1>
+            <h1>Painel de Controlo de Bots</h1>
             <div class="header-info">
-                <p>SYNC_STATUS: <span class="active-pulse">CONNECTED</span></p>
+                <p>STATUS: <span class="active-pulse">CONECTADO</span></p>
                 <p>HOST: bots.expertbr.com</p>
             </div>
         </header>
@@ -24,7 +24,7 @@
             </main>
 
         <footer class="panel-footer">
-            <p>SYSTEM AUTO-SYNC IN <span id="countdown">30</span>s. LAST SYNC: <span id="last-updated">NEVER</span></p>
+            <p>Sincronização automática em <span id="countdown">30</span>s. Última verificação: <span id="last-updated">Nunca</span></p>
         </footer>
     </div>
 
@@ -42,73 +42,71 @@
             if (!response.ok) {
                 if (response.status === 401) {
                     clearInterval(refreshTimer);
-                    document.body.innerHTML = `<div class="container"><p class="error-message">[AUTH_FAILURE] :: Acesso negado. Recarregue e forneça credenciais válidas.</p></div>`;
+                    document.body.innerHTML = `<div class="container"><p class="error-message">[FALHA DE AUTENTICAÇÃO] :: Acesso negado. Recarregue e forneça as credenciais corretas.</p></div>`;
                 }
-                const errorData = await response.json().catch(() => ({ error: 'Connection failure. Server unreachable.' }));
+                const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
                 throw new Error(errorData.error);
             }
             return response.json();
         }
 
         async function manageBot(name, action) {
-            if (!confirm(`Confirm command execution?\n\n> ${action.toUpperCase()} ${name}`)) return;
+            const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
+            if (!confirm(`Confirmar execução do comando?\n\n> ${actionPt[action]} ${name}`)) return;
             try {
                 const result = await fetchWithAuth('/api/bots/manage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, action })
                 });
-                console.log(result.message); // Log para o admin
+                console.log(result.message);
                 loadBots();
             } catch (error) {
-                alert(`// EXECUTION_ERROR\n> ${error.message}`);
+                alert(`// ERRO DE EXECUÇÃO\n> ${error.message}`);
             }
         }
         
-        // --- Renderização da Interface Futurista ---
+        // --- Renderização da Interface (em Português) ---
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
             const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
+            const statusText = bot.pm2_env.status === 'online' ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
 
             return `
-                <div class="bot-card" style="--glow-color: ${isOnline ? 'var(--cyan)' : 'var(--magenta)'};">
+                <div class="bot-card" style="--glow-color: ${isOnline ? 'var(--cyan-rgba)' : 'var(--magenta-rgba)'};">
                     <div class="card-header">
                         <h2>> ${bot.name}</h2>
                         <div class="status-indicator ${statusClass}">
-                            <span>${bot.pm2_env.status.toUpperCase()}</span>
+                            <span>${statusText}</span>
                         </div>
                     </div>
                     <div class="card-body">
-                        <p class="data-field"><span class="label">CPU_LOAD</span>: ${bot.monit.cpu}%</p>
-                        <p class="data-field"><span class="label">MEM_USAGE</span>: ${memory} MB</p>
-                        <p class="data-field"><span class="label">RESTARTS</span>: ${bot.pm2_env.restart_time}</p>
+                        <p class="data-field"><span class="label">CARGA DE CPU</span>: ${bot.monit.cpu}%</p>
+                        <p class="data-field"><span class="label">USO DE MEMÓRIA</span>: ${memory} MB</p>
+                        <p class="data-field"><span class="label">REINICIALIZAÇÕES</span>: ${bot.pm2_env.restart_time}</p>
                     </div>
                     <div class="card-actions">
-                        <button class="action-btn" onclick="manageBot('${bot.name}', 'start')">INITIATE</button>
-                        <button class="action-btn" onclick="manageBot('${bot.name}', 'restart')">REBOOT</button>
-                        <button class="action-btn btn-stop" onclick="manageBot('${bot.name}', 'stop')">TERMINATE</button>
+                        <button class="action-btn" onclick="manageBot('${bot.name}', 'start')">INICIAR</button>
+                        <button class="action-btn" onclick="manageBot('${bot.name}', 'restart')">REINICIAR</button>
+                        <button class="action-btn btn-stop" onclick="manageBot('${bot.name}', 'stop')">PARAR</button>
                     </div>
-                    <div class="corner-decoration top-left"></div>
-                    <div class="corner-decoration top-right"></div>
-                    <div class="corner-decoration bottom-left"></div>
-                    <div class="corner-decoration bottom-right"></div>
                 </div>
             `;
         }
 
         async function loadBots() {
-            botListContainer.innerHTML = '<p class="loading-message">QUERYING PM2_DAEMON...</p>';
+            botListContainer.innerHTML = '<p class="loading-message">Consultando o servidor PM2...</p>';
             try {
                 const bots = await fetchWithAuth('/api/bots/status');
                 if (bots && bots.length > 0) {
                     botListContainer.innerHTML = bots.map(renderBot).join('');
                 } else {
-                    botListContainer.innerHTML = '<p class="info-message">[EMPTY_RESPONSE] :: No active processes found.</p>';
+                    botListContainer.innerHTML = '<p class="info-message">[RESPOSTA VAZIA] :: Nenhum processo encontrado.</p>';
                 }
-                lastUpdatedElement.textContent = new Date().toLocaleTimeString('en-GB'); // Formato 24h
+                lastUpdatedElement.textContent = new Date().toLocaleTimeString('pt-BR');
             } catch (error) {
-                botListContainer.innerHTML = `<p class="error-message">[CONNECTION_ERROR] :: ${error.message}</p>`;
+                botListContainer.innerHTML = `<p class="error-message">[ERRO DE CONEXÃO] :: ${error.message}</p>`;
             }
             resetCountdown();
         }
