@@ -185,6 +185,54 @@ app.get('/api/bots/logs/:name', auth, async (req, res) => {
     }
 });
 
+// [Módulo 5] Rota para ATUALIZAR um bot a partir do Git (protegida)
+app.post('/api/bots/update/:name', auth, async (req, res) => {
+    const { name } = req.params;
+    const botData = req.body.scriptPath; 
+    
+    if (!name || !botData) {
+        return res.status(400).json({ error: 'Nome e caminho do script do bot são obrigatórios.' });
+    }
+    
+    const botDirectory = path.dirname(botData);
+
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+
+        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
+        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+
+        const commands = [
+            'git pull',
+            'npm install',
+            `${nodePath} ${pm2Path} reload ${name}`
+        ];
+        
+        let fullOutput = `Iniciando deploy para o bot '${name}' no diretório '${botDirectory}'...\n\n`;
+
+        for (const command of commands) {
+            fullOutput += `> Executando: ${command}\n`;
+            const result = await ssh.execCommand(command, { cwd: botDirectory });
+            
+            if (result.code !== 0) {
+                fullOutput += `ERRO:\n${result.stderr}`;
+                throw new Error(`O comando '${command}' falhou:\n${result.stderr}`);
+            }
+            fullOutput += `${result.stdout}\n\n`;
+        }
+        
+        res.json({ message: `Deploy do bot '${name}' concluído com sucesso.`, output: fullOutput });
+
+    } catch (error) {
+        console.error(`Erro no deploy do bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha no deploy do bot. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
+
 // --- Rota Principal ---
 app.get('/', auth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -5,10 +5,12 @@
     --dark-blue: #0A0F1A;
     --cyan: #00FFFF;
     --red: #FF4747;
+    --yellow: #FFFF00;
     --white: #EAEAEA;
     
     --cyan-rgba: rgba(0, 255, 255, 0.7);
     --red-rgba: rgba(255, 71, 71, 0.7);
+    --yellow-rgba: rgba(255, 255, 0, 0.7);
 
     --font-body: 'Roboto Mono', monospace;
     --font-title: 'Orbitron', sans-serif;
@@ -188,14 +190,14 @@ h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.5rem;
 }
 
-.action-btn-logs {
+.action-btn-secondary, .action-btn-update {
     background: transparent;
-    border: 1px solid var(--cyan-rgba);
+    border: 1px solid;
     border-radius: 4px;
     padding: 0.4rem 0.6rem;
-    color: var(--cyan);
     cursor: pointer;
     font-family: var(--font-body);
     font-size: 0.8rem;
@@ -203,10 +205,27 @@ h1 {
     transition: all 0.2s ease;
 }
 
-.action-btn-logs:hover {
+.action-btn-secondary {
+    border-color: var(--cyan-rgba);
+    color: var(--cyan);
+}
+
+.action-btn-secondary:hover {
     background-color: var(--cyan);
     color: var(--black);
     text-shadow: none;
+}
+
+.action-btn-update {
+    border-color: var(--yellow-rgba);
+    color: var(--yellow);
+}
+
+.action-btn-update:hover {
+    background-color: var(--yellow);
+    color: var(--black);
+    text-shadow: none;
+    box-shadow: 0 0 8px var(--yellow);
 }
 
 .action-btn-delete {
@@ -218,6 +237,7 @@ h1 {
     font-size: 0.8rem;
     text-transform: uppercase;
     transition: all 0.2s ease;
+    padding: 0.4rem 0;
 }
 
 .action-btn-delete:hover {
@@ -304,7 +324,7 @@ h1 {
     margin-top: 2rem;
 }
 
-.modal-logs {
+.modal-output {
     max-width: 80%;
     max-height: 80vh;
     display: flex;
