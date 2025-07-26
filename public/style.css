@@ -1,185 +1,267 @@
-/* Definição de variáveis de cor para ambos os temas */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono:wght@400;700&display=swap');
+
 :root {
-    /* Cores base */
-    --green: #10B981;
-    --red: #EF4444;
-    --blue: #3B82F6;
-    --blue-hover: #2563EB;
-
-    /* Transições */
-    --transition-fast: all 0.2s ease-in-out;
+    --black: #000000;
+    --dark-blue: #0A0F1A;
+    --dark-grey: #1a1a1a;
+    --cyan: #00FFFF;
+    --magenta: #FF00FF;
+    --yellow: #FFFF00;
+    --white: #EAEAEA;
+    --font-body: 'Roboto Mono', monospace;
+    --font-title: 'Orbitron', sans-serif;
+    --glow-color: var(--cyan);
 }
 
-/* Tema Escuro (Dark Mode) */
-html.dark {
-    --bg-primary: #111827;      /* Fundo principal */
-    --bg-secondary: #1F2937;    /* Fundo dos cards */
-    --border-color: #374151;    /* Cor da borda */
-    --text-primary: #F9FAFB;    /* Texto principal */
-    --text-secondary: #9CA3AF;  /* Texto secundário */
-    color-scheme: dark;
-}
-
-/* Tema Claro (Light Mode) */
-html.light {
-    --bg-primary: #F3F4F6;
-    --bg-secondary: #FFFFFF;
-    --border-color: #D1D5DB;
-    --text-primary: #1F2937;
-    --text-secondary: #4B5563;
-    color-scheme: light;
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    margin: 0;
-    padding: 20px;
-    transition: var(--transition-fast);
+    background-color: var(--black);
+    color: var(--white);
+    font-family: var(--font-body);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 2rem;
+    background-image:
+        linear-gradient(rgba(10, 15, 26, 0.8), rgba(10, 15, 26, 0.8)),
+        url('https://www.transparenttextures.com/patterns/hexellence.png');
+    text-shadow: 0 0 2px rgba(0, 255, 255, 0.5);
+}
+
+.scanlines {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 100% 3px;
+    animation: scan 10s linear infinite;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+@keyframes scan {
+    from { background-position-y: 0; }
+    to { background-position-y: 3px; }
 }
 
 .container {
-    max-width: 960px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 1200px;
+    border: 1px solid var(--cyan);
+    padding: 1rem;
+    background: rgba(10, 15, 26, 0.7);
+    backdrop-filter: blur(2px);
+    box-shadow: 0 0 15px var(--cyan), inset 0 0 15px var(--cyan);
 }
 
 /* Header */
 .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 40px;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 20px;
+    text-align: center;
+    border-bottom: 2px solid var(--cyan);
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
 }
 
 h1 {
-    margin: 0;
-    color: var(--blue);
-    font-size: 1.8rem;
+    font-family: var(--font-title);
+    font-size: 2.5rem;
+    color: var(--cyan);
+    text-transform: uppercase;
+    text-shadow: 0 0 5px var(--cyan), 0 0 10px var(--cyan), 0 0 15px #fff;
 }
 
-/* Seletor de Tema */
-#theme-toggle {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    cursor: pointer;
-    padding: 8px;
+.header-info {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--cyan);
+    margin-top: 0.5rem;
 }
-#theme-toggle:hover {
-    background-color: var(--border-color);
-}
-#theme-toggle .icon-sun { display: none; }
-#theme-toggle .icon-moon { display: block; color: var(--text-primary); }
-html.light #theme-toggle .icon-sun { display: block; color: var(--text-primary); }
-html.light #theme-toggle .icon-moon { display: none; }
 
+.active-pulse {
+    animation: pulse-text 2s infinite;
+}
+
+@keyframes pulse-text {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
 
 /* Grelha de Bots */
 .bot-list-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
 }
 
-/* Cards dos Bots */
+/* Card Futurista */
 .bot-card {
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
-    transition: var(--transition-fast);
+    border: 1px solid var(--glow-color);
+    background: linear-gradient(145deg, var(--dark-blue), #182235);
+    padding: 1.5rem;
+    position: relative;
+    box-shadow: 0 0 10px var(--glow-color);
+    transition: all 0.3s ease;
 }
 .bot-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+    box-shadow: 0 0 20px var(--glow-color);
 }
 
-.bot-header {
+.card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 15px;
-    margin-bottom: 15px;
+    margin-bottom: 1rem;
+    border-bottom: 1px dashed var(--glow-color);
+    padding-bottom: 1rem;
 }
-.bot-header h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    color: var(--text-primary);
+.card-header h2 {
+    font-size: 1.2rem;
+    color: var(--white);
+    text-transform: uppercase;
 }
-
-/* Status */
-.status-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-}
-.status-dot.online { background-color: var(--green); }
-.status-dot.stopped { background-color: var(--red); animation: none; }
-
-.status-text.online { color: var(--green); font-weight: bold; }
-.status-text.stopped { color: var(--red); font-weight: bold; }
-
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
-/* Informações do Bot */
-.bot-info p {
-    margin: 8px 0;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-.bot-info strong {
-    color: var(--text-primary);
-}
-
-/* Botões de Ação */
-.bot-actions {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-}
-.bot-actions button {
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
+.status-indicator {
+    padding: 0.3rem 0.6rem;
     font-weight: bold;
-    color: white;
-    background-color: var(--blue);
-    transition: var(--transition-fast);
+    font-size: 0.8rem;
 }
-.bot-actions button:hover {
-    background-color: var(--blue-hover);
-    transform: scale(1.05);
+.status-indicator.status-online {
+    background-color: var(--cyan);
+    color: var(--black);
+    text-shadow: none;
 }
-.bot-actions button.stop { background-color: var(--red); }
-.bot-actions button.stop:hover { background-color: #DC2626; }
+.status-indicator.status-offline {
+    background-color: var(--magenta);
+    color: var(--black);
+    text-shadow: none;
+}
 
+.card-body .data-field {
+    margin: 0.5rem 0;
+}
+.data-field .label {
+    color: var(--cyan);
+    margin-right: 1rem;
+}
+
+.card-actions {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.action-btn {
+    font-family: var(--font-body);
+    background-color: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+.action-btn:hover {
+    background-color: var(--cyan);
+    color: var(--black);
+    text-shadow: none;
+}
+.action-btn.btn-stop {
+    border-color: var(--magenta);
+    color: var(--magenta);
+}
+.action-btn.btn-stop:hover {
+    background-color: var(--magenta);
+    color: var(--black);
+}
+
+/* Decorações de Canto */
+.corner-decoration {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: var(--cyan);
+    border-style: solid;
+}
+.top-left { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+.top-right { top: -2px; right: -2px; border-width: 2px 2px 0 0; }
+.bottom-left { bottom: -2px; left: -2px; border-width: 0 0 2px 2px; }
+.bottom-right { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+
+/* Mensagens de estado */
+.loading-message, .info-message, .error-message {
+    text-align: center;
+    padding: 2rem;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    color: var(--cyan);
+}
+.error-message {
+    color: var(--magenta);
+}
 
 /* Footer */
 .panel-footer {
     text-align: center;
-    margin-top: 40px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 0.9rem;
+    border-top: 2px solid var(--cyan);
+    padding-top: 1rem;
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    color: var(--cyan);
 }
 
+/* Efeito Glitch no Título */
+.glitch {
+  position: relative;
+}
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--dark-blue);
+  overflow: hidden;
+}
+.glitch::before {
+  left: 2px;
+  text-shadow: -2px 0 var(--magenta);
+  animation: glitch-1 2s infinite linear reverse;
+}
+.glitch::after {
+  left: -2px;
+  text-shadow: -2px 0 var(--yellow), 2px 2px var(--cyan);
+  animation: glitch-2 2s infinite linear reverse;
+}
 
-/* Estados de erro e carregamento */
-.error { color: var(--red); font-weight: bold; }
-.error-card { border-left: 5px solid var(--red); }
+@keyframes glitch-1 {
+  0% { clip-path: inset(10% 0 80% 0); }
+  10% { clip-path: inset(50% 0 30% 0); }
+  20% { clip-path: inset(90% 0 2% 0); }
+  30% { clip-path: inset(35% 0 55% 0); }
+  40% { clip-path: inset(0 0 95% 0); }
+  50% { clip-path: inset(60% 0 10% 0); }
+  60% { clip-path: inset(80% 0 5% 0); }
+  70% { clip-path: inset(20% 0 70% 0); }
+  80% { clip-path: inset(45% 0 45% 0); }
+  90% { clip-path: inset(95% 0 1% 0); }
+  100% { clip-path: inset(15% 0 75% 0); }
+}
+
+@keyframes glitch-2 {
+    /* Animação similar para o segundo overlay */
+    0% { clip-path: inset(78% 0 12% 0); }
+    100% { clip-path: inset(33% 0 55% 0); }
+}
