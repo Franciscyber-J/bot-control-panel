@@ -84,7 +84,7 @@ body {
     position: relative;
     margin-bottom: 1.5rem;
 }
-.input-group > i { /* Ícone de utilizador/chave */
+.input-group > i {
     position: absolute;
     left: 15px;
     top: 50%;
@@ -95,7 +95,7 @@ body {
 }
 .input-group input {
     width: 100%;
-    padding: 1rem 1rem 1rem 3rem;
+    padding: 1rem 3.5rem 1rem 3rem; /* Aumenta o padding direito para o ícone */
     background-color: var(--primary-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -110,6 +110,7 @@ body {
     box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
 }
 
+/* Correção do Ícone "Olhinho" */
 .toggle-password {
     position: absolute;
     right: 0;

@@ -78,13 +78,15 @@
         });
 
         form.addEventListener('submit', async (event) => {
-            event.preventDefault();
+            // Previne o comportamento padrão de refresh do formulário
+            event.preventDefault(); 
             errorMessageDiv.textContent = '';
             
             const username = usernameInput.value;
             const password = passwordInput.value;
 
             try {
+                // Faz a chamada real para a API de login no servidor
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -96,6 +98,7 @@
                     throw new Error(errorData.error || 'Credenciais inválidas');
                 }
                 
+                // Se o login for bem-sucedido, guarda as credenciais se 'Lembrar-me' estiver marcado
                 if (rememberMeInput.checked) {
                     localStorage.setItem('rememberMe', 'true');
                     localStorage.setItem('username', username);
@@ -106,6 +109,7 @@
                     localStorage.removeItem('password');
                 }
 
+                // Redireciona para o dashboard
                 window.location.href = '/dashboard';
 
             } catch (error) {
