@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 10001;
 const auth = (req, res, next) => {
     const user = basicAuth(req);
     if (!user || user.name !== process.env.ADMIN_USER || user.pass !== process.env.ADMIN_PASSWORD) {
-        res.set('WWW-Authenticate', 'Basic realm="Bot Control Panel"');
+        res.set('WWW-Authenticate', 'Basic realm="Painel de Controlo de Bots"');
         return res.status(401).send('Authentication required.');
     }
     return next();
@@ -25,15 +25,8 @@ const sshConfig = {
     host: process.env.SSH_HOST,
     username: process.env.SSH_USER,
     password: process.env.SSH_PASSWORD,
-    // Adicionamos um timeout para evitar que a conexão fique pendurada indefinidamente
     readyTimeout: 20000 
 };
-
-// #################### ARQUITETURA DA CORREÇÃO ####################
-// A lógica de conexão SSH foi movida para dentro de cada rota.
-// Cada pedido de API agora cria, usa e destrói a sua própria conexão de forma isolada e segura.
-// Isto previne os erros de ECONNRESET ao não reutilizar ou manter conexões abertas de forma inadequada.
-// #################################################################
 
 // --- Rotas da API ---
 
@@ -50,7 +43,6 @@ app.get('/api/bots/status', auth, async (req, res) => {
         const result = await ssh.execCommand(command, { cwd: '/root' });
 
         if (result.code !== 0) {
-            // Se houver erro, o stderr é mais informativo
             throw new Error(result.stderr || 'O comando `pm2 jlist` falhou no servidor remoto.');
         }
 
@@ -60,7 +52,6 @@ app.get('/api/bots/status', auth, async (req, res) => {
         console.error("Erro na rota /api/bots/status:", error.message);
         res.status(500).json({ error: `Falha ao conectar ou executar o comando no servidor remoto. Detalhe: ${error.message}` });
     } finally {
-        // Garante que a conexão seja sempre fechada
         if (ssh.connection) {
             ssh.dispose();
         }
@@ -94,12 +85,74 @@ app.post('/api/bots/manage', auth, async (req, res) => {
         console.error(`Erro na rota /api/bots/manage para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
     } finally {
-        // Garante que a conexão seja sempre fechada
         if (ssh.connection) {
             ssh.dispose();
         }
     }
 });
+
+// Rota para ADICIONAR um novo bot
+app.post('/api/bots/add', auth, async (req, res) => {
+    const { name, scriptPath } = req.body;
+    if (!name || !scriptPath) {
+        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
+    }
+
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+
+        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
+        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+        const command = `${nodePath} ${pm2Path} start ${scriptPath} --name ${name}`;
+
+        const result = await ssh.execCommand(command, { cwd: '/root' });
+
+        if (result.code !== 0) {
+            throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        }
+        
+        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.`, output: result.stdout });
+
+    } catch (error) {
+        console.error(`Erro ao adicionar o bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
+// Rota para EXCLUIR um bot
+app.delete('/api/bots/delete/:name', auth, async (req, res) => {
+    const { name } = req.params;
+    if (!name) {
+        return res.status(400).json({ error: 'Nome do bot é obrigatório.' });
+    }
+
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+
+        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
+        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+        const command = `${nodePath} ${pm2Path} delete ${name}`;
+
+        const result = await ssh.execCommand(command, { cwd: '/root' });
+
+        if (result.code !== 0) {
+            throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
+        }
+        
+        res.json({ message: `Bot '${name}' parado e excluído com sucesso.`, output: result.stdout });
+
+    } catch (error) {
+        console.error(`Erro ao excluir o bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha ao excluir o bot. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
 
 // --- Rota Principal ---
 app.get('/', auth, (req, res) => {
@@ -107,5 +160,5 @@ app.get('/', auth, (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Bot Control Panel a rodar em http://localhost:${PORT}`);
+    console.log(`Painel de Controlo de Bots a rodar em http://localhost:${PORT}`);
 });

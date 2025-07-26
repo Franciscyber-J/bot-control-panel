@@ -14,29 +14,52 @@
     <div class="container">
         <header class="panel-header">
             <h1>Painel de Controlo de Bots</h1>
-            <div class="header-info">
-                <p>STATUS: <span class="active-pulse">CONECTADO</span></p>
-                <p>HOST: bots.expertbr.com</p>
+            <div class="header-controls">
+                <button id="add-bot-btn" class="action-btn">Adicionar Novo Bot</button>
             </div>
         </header>
 
         <main id="bot-list" class="bot-list-grid">
-            </main>
+        </main>
 
         <footer class="panel-footer">
             <p>Sincronização automática em <span id="countdown">30</span>s. Última verificação: <span id="last-updated">Nunca</span></p>
         </footer>
     </div>
 
+    <div id="add-bot-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Adicionar Novo Bot</h2>
+            <form id="add-bot-form">
+                <div class="form-group">
+                    <label for="bot-name">Nome do Processo (ex: meu-bot)</label>
+                    <input type="text" id="bot-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="bot-script">Caminho do Script no Servidor (ex: /root/bots/meu-bot/index.js)</label>
+                    <input type="text" id="bot-script" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="action-btn">Adicionar e Iniciar</button>
+                    <button type="button" id="cancel-add-btn" class="action-btn btn-stop">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const botListContainer = document.getElementById('bot-list');
         const countdownElement = document.getElementById('countdown');
         const lastUpdatedElement = document.getElementById('last-updated');
+        const addBotBtn = document.getElementById('add-bot-btn');
+        const addBotModal = document.getElementById('add-bot-modal');
+        const addBotForm = document.getElementById('add-bot-form');
+        const cancelAddBtn = document.getElementById('cancel-add-btn');
+
         const REFRESH_INTERVAL = 30;
         let countdown = REFRESH_INTERVAL;
         let refreshTimer;
 
-        // --- Lógica da API ---
         async function fetchWithAuth(url, options = {}) {
             const response = await fetch(url, options);
             if (!response.ok) {
@@ -65,16 +88,29 @@
                 alert(`// ERRO DE EXECUÇÃO\n> ${error.message}`);
             }
         }
-        
-        // --- Renderização da Interface (em Português) ---
+
+        async function deleteBot(name) {
+            if (!confirm(`Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`)) return;
+            try {
+                const result = await fetchWithAuth(`/api/bots/delete/${name}`, {
+                    method: 'DELETE'
+                });
+                alert(result.message);
+                loadBots();
+            } catch (error) {
+                alert(`// ERRO AO EXCLUIR\n> ${error.message}`);
+            }
+        }
+
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
             const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
             const statusText = bot.pm2_env.status === 'online' ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
+            const glowColor = isOnline ? 'var(--cyan-rgba)' : 'var(--red-rgba)';
 
             return `
-                <div class="bot-card" style="--glow-color: ${isOnline ? 'var(--cyan-rgba)' : 'var(--magenta-rgba)'};">
+                <div class="bot-card" style="--glow-color: ${glowColor};">
                     <div class="card-header">
                         <h2>> ${bot.name}</h2>
                         <div class="status-indicator ${statusClass}">
@@ -90,6 +126,9 @@
                         <button class="action-btn" onclick="manageBot('${bot.name}', 'start')">INICIAR</button>
                         <button class="action-btn" onclick="manageBot('${bot.name}', 'restart')">REINICIAR</button>
                         <button class="action-btn btn-stop" onclick="manageBot('${bot.name}', 'stop')">PARAR</button>
+                    </div>
+                    <div class="card-footer-actions">
+                        <button class="action-btn-delete" onclick="deleteBot('${bot.name}')">Excluir Bot</button>
                     </div>
                 </div>
             `;
@@ -111,7 +150,6 @@
             resetCountdown();
         }
 
-        // --- Lógica de Auto-Refresh ---
         function resetCountdown() {
             clearInterval(refreshTimer);
             countdown = REFRESH_INTERVAL;
@@ -124,6 +162,34 @@
                 }
             }, 1000);
         }
+        
+        addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
+        cancelAddBtn.addEventListener('click', () => { addBotModal.style.display = 'none'; });
+        window.addEventListener('click', (event) => {
+            if (event.target === addBotModal) {
+                addBotModal.style.display = 'none';
+            }
+        });
+
+        addBotForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const name = document.getElementById('bot-name').value;
+            const scriptPath = document.getElementById('bot-script').value;
+            
+            try {
+                const result = await fetchWithAuth('/api/bots/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, scriptPath })
+                });
+                alert(result.message);
+                addBotModal.style.display = 'none';
+                addBotForm.reset();
+                loadBots();
+            } catch (error) {
+                alert(`// ERRO AO ADICIONAR\n> ${error.message}`);
+            }
+        });
 
         loadBots();
     </script>
