@@ -7,14 +7,17 @@ const cookieSession = require('cookie-session');
 const app = express();
 const PORT = process.env.PORT || 10001;
 
+// [CORREÇÃO] Informa ao Express para confiar no proxy reverso da Render.
+// Isto é essencial para que os cookies seguros funcionem corretamente em produção.
+app.set('trust proxy', 1);
+
 // --- Configuração da Sessão com cookie-session ---
 app.use(cookieSession({
     name: 'bcp-session',
     keys: [process.env.SESSION_SECRET],
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
     httpOnly: true,
-    // Em desenvolvimento, 'secure' deve ser false para funcionar com http://localhost
-    secure: process.env.NODE_ENV === 'production' 
+    secure: process.env.NODE_ENV === 'production'
 }));
 
 // --- Middleware de Autenticação Baseado em Sessão ---
@@ -43,27 +46,20 @@ app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// --- Rotas da API de Autenticação ---
+// --- Rotas da API de Autenticação (Públicas) ---
 app.post('/api/login', (req, res) => {
-    // [LOG DE DIAGNÓSTICO]
-    console.log(`[${new Date().toISOString()}] Recebido pedido de login para a rota /api/login.`);
-    
     const { username, password } = req.body;
-    console.log(`[DIAGNÓSTICO] Tentativa de login com o utilizador: "${username}"`);
 
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
-        console.error('[ERRO CRÍTICO] Variáveis de ambiente ADMIN_USER ou ADMIN_PASSWORD não estão configuradas.');
         return res.status(500).json({ error: 'As credenciais de administrador não estão configuradas no servidor.' });
     }
 
     if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASSWORD) {
-        console.log(`[DIAGNÓSTICO] Autenticação bem-sucedida para "${username}". A criar sessão...`);
         req.session.isAuthenticated = true;
         req.session.user = username;
         return res.status(200).json({ message: 'Login bem-sucedido' });
     }
     
-    console.log(`[DIAGNÓSTICO] Falha na autenticação para "${username}". Credenciais inválidas.`);
     res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
