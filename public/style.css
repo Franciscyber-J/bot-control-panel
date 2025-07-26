@@ -182,10 +182,31 @@ h1 {
 }
 
 .card-footer-actions {
-    border-top: 1px dashed rgba(255, 71, 71, 0.4);
+    border-top: 1px dashed rgba(127, 127, 127, 0.4);
     margin-top: 1rem;
     padding-top: 1rem;
-    text-align: right;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.action-btn-logs {
+    background: transparent;
+    border: 1px solid var(--cyan-rgba);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    color: var(--cyan);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+
+.action-btn-logs:hover {
+    background-color: var(--cyan);
+    color: var(--black);
+    text-shadow: none;
 }
 
 .action-btn-delete {
@@ -281,4 +302,33 @@ h1 {
     justify-content: flex-end;
     gap: 1rem;
     margin-top: 2rem;
+}
+
+.modal-logs {
+    max-width: 80%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-container {
+    background-color: var(--black);
+    border: 1px solid var(--cyan-rgba);
+    padding: 1rem;
+    overflow-y: auto;
+    flex-grow: 1;
+    min-height: 300px;
+}
+
+.log-container pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.log-container code {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--white);
+    text-shadow: none;
 }

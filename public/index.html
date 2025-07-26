@@ -47,14 +47,32 @@
         </div>
     </div>
 
+    <div id="log-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content modal-logs">
+            <h2 id="log-modal-title">Logs do Bot</h2>
+            <div class="log-container">
+                <pre><code id="log-content"></code></pre>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="close-log-btn" class="action-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const botListContainer = document.getElementById('bot-list');
         const countdownElement = document.getElementById('countdown');
         const lastUpdatedElement = document.getElementById('last-updated');
+        
         const addBotBtn = document.getElementById('add-bot-btn');
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
         const cancelAddBtn = document.getElementById('cancel-add-btn');
+
+        const logModal = document.getElementById('log-modal');
+        const logModalTitle = document.getElementById('log-modal-title');
+        const logContent = document.getElementById('log-content');
+        const closeLogBtn = document.getElementById('close-log-btn');
 
         const REFRESH_INTERVAL = 30;
         let countdown = REFRESH_INTERVAL;
@@ -102,6 +120,19 @@
             }
         }
 
+        async function showLogs(name) {
+            logModal.style.display = 'flex';
+            logModalTitle.textContent = `Logs do Bot: ${name}`;
+            logContent.textContent = 'A carregar logs...';
+            
+            try {
+                const result = await fetchWithAuth(`/api/bots/logs/${name}`);
+                logContent.textContent = result.logs;
+            } catch (error) {
+                logContent.textContent = `// ERRO AO CARREGAR LOGS\n> ${error.message}`;
+            }
+        }
+
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -128,6 +159,7 @@
                         <button class="action-btn btn-stop" onclick="manageBot('${bot.name}', 'stop')">PARAR</button>
                     </div>
                     <div class="card-footer-actions">
+                        <button class="action-btn-logs" onclick="showLogs('${bot.name}')">Ver Logs</button>
                         <button class="action-btn-delete" onclick="deleteBot('${bot.name}')">Excluir Bot</button>
                     </div>
                 </div>
@@ -165,9 +197,15 @@
         
         addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
         cancelAddBtn.addEventListener('click', () => { addBotModal.style.display = 'none'; });
+
+        closeLogBtn.addEventListener('click', () => { logModal.style.display = 'none'; });
+        
         window.addEventListener('click', (event) => {
             if (event.target === addBotModal) {
                 addBotModal.style.display = 'none';
+            }
+            if (event.target === logModal) {
+                logModal.style.display = 'none';
             }
         });
 

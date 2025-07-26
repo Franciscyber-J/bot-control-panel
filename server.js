@@ -30,7 +30,12 @@ const sshConfig = {
 
 // --- Rotas da API ---
 
-// Rota para obter o status de todos os bots
+// [Módulo 3] Rota de Health Check para o UptimeRobot (pública)
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Rota para obter o status de todos os bots (protegida)
 app.get('/api/bots/status', auth, async (req, res) => {
     const ssh = new NodeSSH();
     try {
@@ -52,13 +57,11 @@ app.get('/api/bots/status', auth, async (req, res) => {
         console.error("Erro na rota /api/bots/status:", error.message);
         res.status(500).json({ error: `Falha ao conectar ou executar o comando no servidor remoto. Detalhe: ${error.message}` });
     } finally {
-        if (ssh.connection) {
-            ssh.dispose();
-        }
+        if (ssh.connection) ssh.dispose();
     }
 });
 
-// Rota para gerir um bot específico (start, stop, restart)
+// Rota para gerir um bot específico (start, stop, restart) (protegida)
 app.post('/api/bots/manage', auth, async (req, res) => {
     const { name, action } = req.body;
     if (!name || !['restart', 'stop', 'start'].includes(action)) {
@@ -85,13 +88,11 @@ app.post('/api/bots/manage', auth, async (req, res) => {
         console.error(`Erro na rota /api/bots/manage para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
     } finally {
-        if (ssh.connection) {
-            ssh.dispose();
-        }
+        if (ssh.connection) ssh.dispose();
     }
 });
 
-// Rota para ADICIONAR um novo bot
+// [Módulo 1] Rota para ADICIONAR um novo bot (protegida)
 app.post('/api/bots/add', auth, async (req, res) => {
     const { name, scriptPath } = req.body;
     if (!name || !scriptPath) {
@@ -122,7 +123,7 @@ app.post('/api/bots/add', auth, async (req, res) => {
     }
 });
 
-// Rota para EXCLUIR um bot
+// [Módulo 1] Rota para EXCLUIR um bot (protegida)
 app.delete('/api/bots/delete/:name', auth, async (req, res) => {
     const { name } = req.params;
     if (!name) {
@@ -153,6 +154,36 @@ app.delete('/api/bots/delete/:name', auth, async (req, res) => {
     }
 });
 
+// [Módulo 4] Rota para obter os logs de um bot (protegida)
+app.get('/api/bots/logs/:name', auth, async (req, res) => {
+    const { name } = req.params;
+    if (!name) {
+        return res.status(400).json({ error: 'Nome do bot é obrigatório.' });
+    }
+
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+
+        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
+        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+        const command = `${nodePath} ${pm2Path} logs ${name} --lines 100 --nostream`;
+
+        const result = await ssh.execCommand(command, { cwd: '/root' });
+
+        if (result.stderr && !result.stdout) {
+             throw new Error(result.stderr);
+        }
+        
+        res.json({ logs: result.stdout || 'Nenhum log disponível.' });
+
+    } catch (error) {
+        console.error(`Erro ao buscar logs para o bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha ao buscar logs do bot. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
 
 // --- Rota Principal ---
 app.get('/', auth, (req, res) => {
