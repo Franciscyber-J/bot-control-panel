@@ -8,13 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 10001;
 
 // --- Configuração da Sessão com cookie-session ---
-// Esta abordagem é segura e não requer um serviço externo como Redis.
 app.use(cookieSession({
-    name: 'bcp-session', // Nome do cookie
-    keys: [process.env.SESSION_SECRET || 'uma-chave-secreta-muito-forte-e-dificil-de-adivinhar'], // Use uma variável de ambiente para isto!
-    maxAge: 24 * 60 * 60 * 1000, // 24 horas de validade
-    httpOnly: true, // Impede que o cookie seja acedido por JavaScript no frontend
-    secure: process.env.NODE_ENV === 'production' // Garante que o cookie só seja enviado via HTTPS em produção
+    name: 'bcp-session',
+    keys: [process.env.SESSION_SECRET],
+    maxAge: 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    // Em desenvolvimento, 'secure' deve ser false para funcionar com http://localhost
+    secure: process.env.NODE_ENV === 'production' 
 }));
 
 // --- Middleware de Autenticação Baseado em Sessão ---
@@ -22,7 +22,6 @@ const checkAuth = (req, res, next) => {
     if (req.session.isAuthenticated) {
         return next();
     }
-    // Se a chamada for para uma API, retorna erro. Se for para uma página, redireciona.
     if (req.originalUrl.startsWith('/api/')) {
         return res.status(401).json({ error: 'Não autorizado. Por favor, faça login.' });
     }
@@ -46,22 +45,36 @@ app.get('/dashboard', checkAuth, (req, res) => {
 
 // --- Rotas da API de Autenticação ---
 app.post('/api/login', (req, res) => {
+    // [LOG DE DIAGNÓSTICO]
+    console.log(`[${new Date().toISOString()}] Recebido pedido de login para a rota /api/login.`);
+    
     const { username, password } = req.body;
+    console.log(`[DIAGNÓSTICO] Tentativa de login com o utilizador: "${username}"`);
+
+    if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
+        console.error('[ERRO CRÍTICO] Variáveis de ambiente ADMIN_USER ou ADMIN_PASSWORD não estão configuradas.');
+        return res.status(500).json({ error: 'As credenciais de administrador não estão configuradas no servidor.' });
+    }
 
     if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASSWORD) {
+        console.log(`[DIAGNÓSTICO] Autenticação bem-sucedida para "${username}". A criar sessão...`);
         req.session.isAuthenticated = true;
         req.session.user = username;
         return res.status(200).json({ message: 'Login bem-sucedido' });
     }
     
+    console.log(`[DIAGNÓSTICO] Falha na autenticação para "${username}". Credenciais inválidas.`);
     res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
 app.post('/api/logout', (req, res) => {
-    req.session = null; // Limpa a sessão
+    req.session = null;
     res.status(200).json({ message: 'Logout bem-sucedido' });
 });
 
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
 
 // --- Rotas da API do Painel (Protegidas) ---
 const apiRouter = express.Router();
@@ -198,13 +211,7 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     }
 });
 
-// Anexe o router protegido ao prefixo /api
 app.use('/api', apiRouter);
-
-// O health check não precisa de autenticação, então fica de fora do apiRouter
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-});
 
 app.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);

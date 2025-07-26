@@ -22,11 +22,11 @@
             <form id="auth-form">
                 <div class="input-group">
                     <i data-feather="user"></i>
-                    <input type="text" id="username" placeholder="Identificador de Utilizador" required>
+                    <input type="text" id="username" placeholder="Identificador de Utilizador" required autocomplete="username">
                 </div>
                 <div class="input-group">
                     <i data-feather="key"></i>
-                    <input type="password" id="password" placeholder="Palavra-passe" required>
+                    <input type="password" id="password" placeholder="Palavra-passe" required autocomplete="current-password">
                     <span class="toggle-password">
                         <i data-feather="eye" class="icon-eye"></i>
                         <i data-feather="eye-off" class="icon-eye-off" style="display: none;"></i>
@@ -78,27 +78,34 @@
         });
 
         form.addEventListener('submit', async (event) => {
-            // Previne o comportamento padrão de refresh do formulário
-            event.preventDefault(); 
+            console.log('Evento de submissão do formulário foi acionado.');
+            event.preventDefault();
+            console.log('Comportamento padrão do formulário foi prevenido (preventDefault chamado).');
+            
             errorMessageDiv.textContent = '';
             
             const username = usernameInput.value;
             const password = passwordInput.value;
 
+            console.log('A enviar pedido de login para /api/login com o utilizador:', username);
+
             try {
-                // Faz a chamada real para a API de login no servidor
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
 
+                console.log('Resposta recebida do servidor com status:', response.status);
+
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Credenciais inválidas');
+                    console.error('Erro na resposta do servidor:', errorData);
+                    throw new Error(errorData.error || `Erro ${response.status}`);
                 }
                 
-                // Se o login for bem-sucedido, guarda as credenciais se 'Lembrar-me' estiver marcado
+                console.log('Login bem-sucedido. A processar e a redirecionar...');
+                
                 if (rememberMeInput.checked) {
                     localStorage.setItem('rememberMe', 'true');
                     localStorage.setItem('username', username);
@@ -109,10 +116,10 @@
                     localStorage.removeItem('password');
                 }
 
-                // Redireciona para o dashboard
                 window.location.href = '/dashboard';
 
             } catch (error) {
+                console.error('Ocorreu um erro no bloco try/catch do formulário:', error);
                 errorMessageDiv.textContent = error.message;
             }
         });
