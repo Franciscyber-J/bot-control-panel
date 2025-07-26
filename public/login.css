@@ -84,7 +84,7 @@ body {
     position: relative;
     margin-bottom: 1.5rem;
 }
-.input-group i {
+.input-group > i { /* Ícone de utilizador/chave */
     position: absolute;
     left: 15px;
     top: 50%;
@@ -112,9 +112,13 @@ body {
 
 .toggle-password {
     position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     cursor: pointer;
     color: var(--secondary-text);
 }
@@ -192,11 +196,6 @@ body {
     height: 1em;
     font-size: 0.9rem;
 }
-
-.error-message.success {
-    color: var(--accent-color);
-}
-
 
 .login-branding {
     flex-basis: 50%;
