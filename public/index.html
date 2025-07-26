@@ -41,7 +41,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="action-btn">Adicionar e Iniciar</button>
-                    <button type="button" id="cancel-add-btn" class="action-btn btn-stop">Cancelar</button>
+                    <button type="button" class="action-btn btn-stop close-modal-btn">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -71,7 +71,30 @@
         </div>
     </div>
 
+    <div id="notification-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="notification-title">Aviso</h2>
+            <p id="notification-message"></p>
+            <div class="modal-actions">
+                <button type="button" class="action-btn close-modal-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="confirmation-title">Confirmar Ação</h2>
+            <p id="confirmation-message"></p>
+            <div class="modal-actions">
+                <button type="button" id="confirm-btn-yes" class="action-btn">Confirmar</button>
+                <button type="button" id="confirm-btn-no" class="action-btn btn-stop">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
+        // --- Constantes dos Elementos ---
         const botListContainer = document.getElementById('bot-list');
         const countdownElement = document.getElementById('countdown');
         const lastUpdatedElement = document.getElementById('last-updated');
@@ -79,7 +102,6 @@
         const addBotBtn = document.getElementById('add-bot-btn');
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
-        const cancelAddBtn = document.getElementById('cancel-add-btn');
 
         const logModal = document.getElementById('log-modal');
         const logModalTitle = document.getElementById('log-modal-title');
@@ -89,10 +111,46 @@
         const updateModalTitle = document.getElementById('update-modal-title');
         const updateContent = document.getElementById('update-content');
 
+        const notificationModal = document.getElementById('notification-modal');
+        const notificationTitle = document.getElementById('notification-title');
+        const notificationMessage = document.getElementById('notification-message');
+
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const confirmationTitle = document.getElementById('confirmation-title');
+        const confirmationMessage = document.getElementById('confirmation-message');
+        const confirmBtnYes = document.getElementById('confirm-btn-yes');
+        const confirmBtnNo = document.getElementById('confirm-btn-no');
+
         const REFRESH_INTERVAL = 30;
         let countdown = REFRESH_INTERVAL;
         let refreshTimer;
 
+        // --- Funções dos Modais Personalizados ---
+        function showNotification(message, title = 'Aviso', type = 'info') {
+            notificationTitle.textContent = title;
+            notificationMessage.textContent = message;
+            notificationModal.dataset.type = type; // 'info' ou 'error' para estilização
+            notificationModal.style.display = 'flex';
+        }
+
+        function showConfirmation(message, title = 'Confirmar Ação') {
+            confirmationTitle.textContent = title;
+            confirmationMessage.textContent = message;
+            confirmationModal.style.display = 'flex';
+
+            return new Promise((resolve) => {
+                confirmBtnYes.onclick = () => {
+                    confirmationModal.style.display = 'none';
+                    resolve(true);
+                };
+                confirmBtnNo.onclick = () => {
+                    confirmationModal.style.display = 'none';
+                    resolve(false);
+                };
+            });
+        }
+
+        // --- Lógica da API ---
         async function fetchWithAuth(url, options = {}) {
             const response = await fetch(url, options);
             if (!response.ok) {
@@ -108,30 +166,34 @@
 
         async function manageBot(name, action) {
             const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
-            if (!confirm(`Confirmar execução do comando?\n\n> ${actionPt[action]} ${name}`)) return;
+            const confirmed = await showConfirmation(`Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
+            if (!confirmed) return;
+            
             try {
                 const result = await fetchWithAuth('/api/bots/manage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, action })
                 });
-                console.log(result.message);
+                showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                alert(`// ERRO DE EXECUÇÃO\n> ${error.message}`);
+                showNotification(`// ERRO DE EXECUÇÃO\n> ${error.message}`, 'Erro', 'error');
             }
         }
 
         async function deleteBot(name) {
-            if (!confirm(`Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`)) return;
+            const confirmed = await showConfirmation(`Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`, 'Confirmar Exclusão');
+            if (!confirmed) return;
+
             try {
                 const result = await fetchWithAuth(`/api/bots/delete/${name}`, {
                     method: 'DELETE'
                 });
-                alert(result.message);
+                showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                alert(`// ERRO AO EXCLUIR\n> ${error.message}`);
+                showNotification(`// ERRO AO EXCLUIR\n> ${error.message}`, 'Erro', 'error');
             }
         }
 
@@ -149,7 +211,8 @@
         }
 
         async function updateBot(name, scriptPath) {
-            if (!confirm(`Confirmar DEPLOY para o bot "${name}"?\n\nIsto executará 'git pull', 'npm install' e 'pm2 reload' no servidor.`)) return;
+            const confirmed = await showConfirmation(`Confirmar DEPLOY para o bot "${name}"?\n\nIsto executará 'git pull', 'npm install' e 'pm2 reload' no servidor.`);
+            if (!confirmed) return;
 
             updateModal.style.display = 'flex';
             updateModalTitle.textContent = `Deploy do Bot: ${name}`;
@@ -168,6 +231,7 @@
             }
         }
 
+        // --- Renderização da Interface ---
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -202,7 +266,8 @@
                 </div>
             `;
         }
-
+        
+        // --- Lógica do Painel ---
         async function loadBots() {
             botListContainer.innerHTML = '<p class="loading-message">Consultando o servidor PM2...</p>';
             try {
@@ -232,8 +297,8 @@
             }, 1000);
         }
         
+        // --- Event Listeners ---
         addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
-        cancelAddBtn.addEventListener('click', () => { addBotModal.style.display = 'none'; });
 
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -258,12 +323,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, scriptPath })
                 });
-                alert(result.message);
                 addBotModal.style.display = 'none';
                 addBotForm.reset();
+                showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                alert(`// ERRO AO ADICIONAR\n> ${error.message}`);
+                showNotification(`// ERRO AO ADICIONAR\n> ${error.message}`, 'Erro', 'error');
             }
         });
 
