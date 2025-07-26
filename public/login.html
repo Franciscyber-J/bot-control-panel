@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCP :: Acesso ao Sistema</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%2300FFFF' d='M20 10 H80 V20 H30 V80 H20 V10 Z M40 30 H90 V40 H50 V90 H40 V30 Z' /%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.css">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="background-animation"></div>
+    <div class="login-container">
+        <div class="login-form">
+            <div class="form-header">
+                <h2>Acesso ao Painel</h2>
+                <p>Inicie a sessão para gerir os seus processos.</p>
+            </div>
+            <form id="auth-form">
+                <div class="input-group">
+                    <i data-feather="user"></i>
+                    <input type="text" id="username" placeholder="Identificador de Utilizador" required>
+                </div>
+                <div class="input-group">
+                    <i data-feather="key"></i>
+                    <input type="password" id="password" placeholder="Palavra-passe" required>
+                    <span class="toggle-password">
+                        <i data-feather="eye" class="icon-eye"></i>
+                        <i data-feather="eye-off" class="icon-eye-off" style="display: none;"></i>
+                    </span>
+                </div>
+                 <div class="options-group">
+                    <label class="remember-me">
+                        <input type="checkbox" id="remember-me">
+                        <span class="checkmark"></span>
+                        Manter sessão iniciada
+                    </label>
+                </div>
+                <button type="submit" class="login-button">Conectar</button>
+                <div id="error-message" class="error-message"></div>
+            </form>
+        </div>
+        <div class="login-branding">
+             <h1>BCP</h1>
+             <p>Bot Control Panel</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        feather.replace();
+
+        const form = document.getElementById('auth-form');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const rememberMeInput = document.getElementById('remember-me');
+        const errorMessageDiv = document.getElementById('error-message');
+        const togglePassword = document.querySelector('.toggle-password');
+        const iconEye = document.querySelector('.icon-eye');
+        const iconEyeOff = document.querySelector('.icon-eye-off');
+        
+        // Carregar credenciais guardadas
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('rememberMe') === 'true') {
+                usernameInput.value = localStorage.getItem('username') || '';
+                passwordInput.value = localStorage.getItem('password') || '';
+                rememberMeInput.checked = true;
+            }
+        });
+
+        // Lógica para mostrar/ocultar a palavra-passe
+        togglePassword.addEventListener('click', () => {
+            const isPassword = passwordInput.type === 'password';
+            passwordInput.type = isPassword ? 'text' : 'password';
+            iconEye.style.display = isPassword ? 'none' : 'block';
+            iconEyeOff.style.display = isPassword ? 'block' : 'none';
+        });
+
+        // Lógica de submissão do formulário
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            errorMessageDiv.textContent = '';
+            
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+
+            try {
+                // A implementação da API de login será feita no próximo passo no server.js
+                // Por agora, este código está preparado para essa futura integração.
+                // A lógica abaixo simula uma chamada de API.
+                
+                // Simulação de chamada:
+                // const response = await fetch('/api/login', {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify({ username, password })
+                // });
+
+                // if (!response.ok) {
+                //     const errorData = await response.json();
+                //     throw new Error(errorData.error || 'Credenciais inválidas');
+                // }
+                
+                // Se o login for bem-sucedido:
+                if (rememberMeInput.checked) {
+                    localStorage.setItem('rememberMe', 'true');
+                    localStorage.setItem('username', username);
+                    localStorage.setItem('password', password); // Nota de segurança: Apenas para conveniência.
+                } else {
+                    localStorage.removeItem('rememberMe');
+                    localStorage.removeItem('username');
+                    localStorage.removeItem('password');
+                }
+
+                // Redirecionar para o painel principal
+                // window.location.href = '/dashboard'; // O painel principal será movido para /dashboard
+
+                // AVISO: A lógica de login completa requer alterações no server.js que serão fornecidas a seguir.
+                // Para fins de demonstração visual, pode testar o formulário.
+                showNotification('Login simulado com sucesso! A redirecionar...', 'success');
+
+
+            } catch (error) {
+                errorMessageDiv.textContent = error.message;
+            }
+        });
+
+        // Função para mostrar notificação (apenas para demonstração)
+        function showNotification(message, type) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.className = `error-message ${type}`;
+        }
+
+    </script>
+</body>
+</html>

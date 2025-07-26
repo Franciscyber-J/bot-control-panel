@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
     <div class="container">
@@ -16,6 +16,7 @@
             <h1>Painel de Controlo de Bots</h1>
             <div class="header-controls">
                 <button id="add-bot-btn" class="action-btn">Adicionar Novo Bot</button>
+                <button id="logout-btn" class="action-btn btn-stop">Logout</button>
             </div>
         </header>
 
@@ -92,9 +93,7 @@
         </div>
     </div>
 
-
     <script>
-        // --- Constantes dos Elementos ---
         const botListContainer = document.getElementById('bot-list');
         const countdownElement = document.getElementById('countdown');
         const lastUpdatedElement = document.getElementById('last-updated');
@@ -121,15 +120,16 @@
         const confirmBtnYes = document.getElementById('confirm-btn-yes');
         const confirmBtnNo = document.getElementById('confirm-btn-no');
 
+        const logoutBtn = document.getElementById('logout-btn');
+
         const REFRESH_INTERVAL = 30;
         let countdown = REFRESH_INTERVAL;
         let refreshTimer;
 
-        // --- Funções dos Modais Personalizados ---
         function showNotification(message, title = 'Aviso', type = 'info') {
             notificationTitle.textContent = title;
             notificationMessage.textContent = message;
-            notificationModal.dataset.type = type; // 'info' ou 'error' para estilização
+            notificationModal.dataset.type = type;
             notificationModal.style.display = 'flex';
         }
 
@@ -150,13 +150,11 @@
             });
         }
 
-        // --- Lógica da API ---
         async function fetchWithAuth(url, options = {}) {
             const response = await fetch(url, options);
             if (!response.ok) {
                 if (response.status === 401) {
-                    clearInterval(refreshTimer);
-                    document.body.innerHTML = `<div class="container"><p class="error-message">[FALHA DE AUTENTICAÇÃO] :: Acesso negado. Recarregue e forneça as credenciais corretas.</p></div>`;
+                    window.location.href = '/';
                 }
                 const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
                 throw new Error(errorData.error);
@@ -231,7 +229,6 @@
             }
         }
 
-        // --- Renderização da Interface ---
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -267,7 +264,6 @@
             `;
         }
         
-        // --- Lógica do Painel ---
         async function loadBots() {
             botListContainer.innerHTML = '<p class="loading-message">Consultando o servidor PM2...</p>';
             try {
@@ -279,6 +275,8 @@
                 }
                 lastUpdatedElement.textContent = new Date().toLocaleTimeString('pt-BR');
             } catch (error) {
+                // A verificação 401 já redireciona em fetchWithAuth
+                if(error.message.includes('401')) return;
                 botListContainer.innerHTML = `<p class="error-message">[ERRO DE CONEXÃO] :: ${error.message}</p>`;
             }
             resetCountdown();
@@ -297,7 +295,6 @@
             }, 1000);
         }
         
-        // --- Event Listeners ---
         addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
 
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
@@ -329,6 +326,18 @@
                 loadBots();
             } catch (error) {
                 showNotification(`// ERRO AO ADICIONAR\n> ${error.message}`, 'Erro', 'error');
+            }
+        });
+
+        logoutBtn.addEventListener('click', async () => {
+            const confirmed = await showConfirmation('Deseja realmente encerrar a sessão?');
+            if(confirmed) {
+                try {
+                    await fetch('/api/logout', { method: 'POST' });
+                    window.location.href = '/';
+                } catch (error) {
+                    showNotification('Falha ao fazer logout.', 'Erro', 'error');
+                }
             }
         });
 

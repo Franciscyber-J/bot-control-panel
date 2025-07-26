@@ -2,57 +2,99 @@ require('dotenv').config();
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
 const path = require('path');
-const basicAuth = require('basic-auth');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 10001;
 
-// --- Configuração de Segurança ---
-const auth = (req, res, next) => {
-    const user = basicAuth(req);
-    if (!user || user.name !== process.env.ADMIN_USER || user.pass !== process.env.ADMIN_PASSWORD) {
-        res.set('WWW-Authenticate', 'Basic realm="Painel de Controlo de Bots"');
-        return res.status(401).send('Authentication required.');
+// --- Configuração da Sessão ---
+app.use(cookieParser());
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'uma-chave-secreta-muito-forte', // Use uma variável de ambiente para isto!
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // Em produção, use 'true'
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 1 dia de validade do cookie
     }
-    return next();
+}));
+
+// --- Middleware de Autenticação Baseado em Sessão ---
+const checkAuth = (req, res, next) => {
+    if (req.session.isAuthenticated) {
+        return next();
+    }
+    // Para chamadas de API, retorna um erro 401. Para páginas, redireciona.
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Não autorizado. Por favor, faça login.' });
+    }
+    res.redirect('/'); 
 };
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Configuração da Conexão SSH ---
+// --- Rota da Página de Login ---
+app.get('/', (req, res) => {
+    if (req.session.isAuthenticated) {
+        return res.redirect('/dashboard');
+    }
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// --- Rota da Página do Painel (Dashboard) ---
+app.get('/dashboard', checkAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// --- Rotas da API de Autenticação ---
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASSWORD) {
+        req.session.isAuthenticated = true;
+        req.session.user = username;
+        return res.status(200).json({ message: 'Login bem-sucedido' });
+    }
+    
+    res.status(401).json({ error: 'Credenciais inválidas' });
+});
+
+app.post('/api/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).json({ error: 'Não foi possível fazer logout' });
+        }
+        res.clearCookie('connect.sid'); // Limpa o cookie da sessão
+        res.status(200).json({ message: 'Logout bem-sucedido' });
+    });
+});
+
+
+// --- Rotas da API do Painel (Protegidas pela Sessão) ---
+const apiRouter = express.Router();
+apiRouter.use(checkAuth); // Protege todas as rotas definidas neste router
+
 const sshConfig = {
     host: process.env.SSH_HOST,
     username: process.env.SSH_USER,
     password: process.env.SSH_PASSWORD,
-    readyTimeout: 20000 
+    readyTimeout: 20000
 };
 
-// --- Rotas da API ---
+// ... (as rotas da API de bots são adicionadas ao router)
 
-// [Módulo 3] Rota de Health Check para o UptimeRobot (pública)
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Rota para obter o status de todos os bots (protegida)
-app.get('/api/bots/status', auth, async (req, res) => {
+apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const command = `${nodePath} ${pm2Path} jlist`;
-
+        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} jlist`;
         const result = await ssh.execCommand(command, { cwd: '/root' });
-
-        if (result.code !== 0) {
-            throw new Error(result.stderr || 'O comando `pm2 jlist` falhou no servidor remoto.');
-        }
-
+        if (result.code !== 0) throw new Error(result.stderr || 'Falha ao listar bots.');
         res.json(JSON.parse(result.stdout));
-
     } catch (error) {
         console.error("Erro na rota /api/bots/status:", error.message);
         res.status(500).json({ error: `Falha ao conectar ou executar o comando no servidor remoto. Detalhe: ${error.message}` });
@@ -61,29 +103,18 @@ app.get('/api/bots/status', auth, async (req, res) => {
     }
 });
 
-// Rota para gerir um bot específico (start, stop, restart) (protegida)
-app.post('/api/bots/manage', auth, async (req, res) => {
+apiRouter.post('/bots/manage', async (req, res) => {
     const { name, action } = req.body;
     if (!name || !['restart', 'stop', 'start'].includes(action)) {
         return res.status(400).json({ error: 'Ação ou nome de bot inválido.' });
     }
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const command = `${nodePath} ${pm2Path} ${action} ${name}`;
-
+        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} ${action} ${name}`;
         const result = await ssh.execCommand(command, { cwd: '/root' });
-
-        if (result.code !== 0) {
-            throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
-        }
-        
-        res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.`, output: result.stdout });
-
+        if (result.code !== 0) throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
+        res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.` });
     } catch (error) {
         console.error(`Erro na rota /api/bots/manage para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
@@ -92,29 +123,18 @@ app.post('/api/bots/manage', auth, async (req, res) => {
     }
 });
 
-// [Módulo 1] Rota para ADICIONAR um novo bot (protegida)
-app.post('/api/bots/add', auth, async (req, res) => {
+apiRouter.post('/bots/add', async (req, res) => {
     const { name, scriptPath } = req.body;
     if (!name || !scriptPath) {
         return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
     }
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const command = `${nodePath} ${pm2Path} start ${scriptPath} --name ${name}`;
-
+        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} start ${scriptPath} --name ${name}`;
         const result = await ssh.execCommand(command, { cwd: '/root' });
-
-        if (result.code !== 0) {
-            throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
-        }
-        
-        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.`, output: result.stdout });
-
+        if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
     } catch (error) {
         console.error(`Erro ao adicionar o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
@@ -123,29 +143,15 @@ app.post('/api/bots/add', auth, async (req, res) => {
     }
 });
 
-// [Módulo 1] Rota para EXCLUIR um bot (protegida)
-app.delete('/api/bots/delete/:name', auth, async (req, res) => {
+apiRouter.delete('/bots/delete/:name', async (req, res) => {
     const { name } = req.params;
-    if (!name) {
-        return res.status(400).json({ error: 'Nome do bot é obrigatório.' });
-    }
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const command = `${nodePath} ${pm2Path} delete ${name}`;
-
+        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} delete ${name}`;
         const result = await ssh.execCommand(command, { cwd: '/root' });
-
-        if (result.code !== 0) {
-            throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
-        }
-        
-        res.json({ message: `Bot '${name}' parado e excluído com sucesso.`, output: result.stdout });
-
+        if (result.code !== 0) throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
+        res.json({ message: `Bot '${name}' parado e excluído com sucesso.` });
     } catch (error) {
         console.error(`Erro ao excluir o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao excluir o bot. Detalhe: ${error.message}` });
@@ -154,29 +160,15 @@ app.delete('/api/bots/delete/:name', auth, async (req, res) => {
     }
 });
 
-// [Módulo 4] Rota para obter os logs de um bot (protegida)
-app.get('/api/bots/logs/:name', auth, async (req, res) => {
+apiRouter.get('/bots/logs/:name', async (req, res) => {
     const { name } = req.params;
-    if (!name) {
-        return res.status(400).json({ error: 'Nome do bot é obrigatório.' });
-    }
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-        const command = `${nodePath} ${pm2Path} logs ${name} --lines 100 --nostream`;
-
+        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} logs ${name} --lines 100 --nostream`;
         const result = await ssh.execCommand(command, { cwd: '/root' });
-
-        if (result.stderr && !result.stdout) {
-             throw new Error(result.stderr);
-        }
-        
+        if (result.stderr && !result.stdout) throw new Error(result.stderr);
         res.json({ logs: result.stdout || 'Nenhum log disponível.' });
-
     } catch (error) {
         console.error(`Erro ao buscar logs para o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao buscar logs do bot. Detalhe: ${error.message}` });
@@ -185,45 +177,32 @@ app.get('/api/bots/logs/:name', auth, async (req, res) => {
     }
 });
 
-// [Módulo 5] Rota para ATUALIZAR um bot a partir do Git (protegida)
-app.post('/api/bots/update/:name', auth, async (req, res) => {
+apiRouter.post('/bots/update/:name', async (req, res) => {
     const { name } = req.params;
-    const botData = req.body.scriptPath; 
-    
+    const botData = req.body.scriptPath;
     if (!name || !botData) {
         return res.status(400).json({ error: 'Nome e caminho do script do bot são obrigatórios.' });
     }
-    
     const botDirectory = path.dirname(botData);
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        const nodePath = '/root/.nvm/versions/node/v18.20.8/bin/node';
-        const pm2Path = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-
         const commands = [
             'git pull',
             'npm install',
-            `${nodePath} ${pm2Path} reload ${name}`
+            `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} reload ${name}`
         ];
-        
         let fullOutput = `Iniciando deploy para o bot '${name}' no diretório '${botDirectory}'...\n\n`;
-
         for (const command of commands) {
             fullOutput += `> Executando: ${command}\n`;
             const result = await ssh.execCommand(command, { cwd: botDirectory });
-            
             if (result.code !== 0) {
                 fullOutput += `ERRO:\n${result.stderr}`;
                 throw new Error(`O comando '${command}' falhou:\n${result.stderr}`);
             }
             fullOutput += `${result.stdout}\n\n`;
         }
-        
         res.json({ message: `Deploy do bot '${name}' concluído com sucesso.`, output: fullOutput });
-
     } catch (error) {
         console.error(`Erro no deploy do bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha no deploy do bot. Detalhe: ${error.message}` });
@@ -232,11 +211,7 @@ app.post('/api/bots/update/:name', auth, async (req, res) => {
     }
 });
 
-
-// --- Rota Principal ---
-app.get('/', auth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.use('/api', apiRouter); // Aplica o router protegido no prefixo /api
 
 app.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar em http://localhost:${PORT}`);
