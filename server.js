@@ -2,24 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
 const path = require('path');
-const session = require('express-session');
-const cookieParser = require('cookie-parser');
-const { v4: uuidv4 } = require('uuid');
+const cookieSession = require('cookie-session');
 
 const app = express();
 const PORT = process.env.PORT || 10001;
 
-// --- Configuração da Sessão ---
-app.use(cookieParser());
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'uma-chave-secreta-muito-forte', // Use uma variável de ambiente para isto!
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-        secure: process.env.NODE_ENV === 'production', // Em produção, use 'true'
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 1 dia de validade do cookie
-    }
+// --- Configuração da Sessão com cookie-session ---
+// Esta abordagem é segura e não requer um serviço externo como Redis.
+app.use(cookieSession({
+    name: 'bcp-session', // Nome do cookie
+    keys: [process.env.SESSION_SECRET || 'uma-chave-secreta-muito-forte-e-dificil-de-adivinhar'], // Use uma variável de ambiente para isto!
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas de validade
+    httpOnly: true, // Impede que o cookie seja acedido por JavaScript no frontend
+    secure: process.env.NODE_ENV === 'production' // Garante que o cookie só seja enviado via HTTPS em produção
 }));
 
 // --- Middleware de Autenticação Baseado em Sessão ---
@@ -27,7 +22,7 @@ const checkAuth = (req, res, next) => {
     if (req.session.isAuthenticated) {
         return next();
     }
-    // Para chamadas de API, retorna um erro 401. Para páginas, redireciona.
+    // Se a chamada for para uma API, retorna erro. Se for para uma página, redireciona.
     if (req.originalUrl.startsWith('/api/')) {
         return res.status(401).json({ error: 'Não autorizado. Por favor, faça login.' });
     }
@@ -37,7 +32,7 @@ const checkAuth = (req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Rota da Página de Login ---
+// --- Rotas das Páginas ---
 app.get('/', (req, res) => {
     if (req.session.isAuthenticated) {
         return res.redirect('/dashboard');
@@ -45,7 +40,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// --- Rota da Página do Painel (Dashboard) ---
 app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
@@ -64,19 +58,14 @@ app.post('/api/login', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-    req.session.destroy(err => {
-        if (err) {
-            return res.status(500).json({ error: 'Não foi possível fazer logout' });
-        }
-        res.clearCookie('connect.sid'); // Limpa o cookie da sessão
-        res.status(200).json({ message: 'Logout bem-sucedido' });
-    });
+    req.session = null; // Limpa a sessão
+    res.status(200).json({ message: 'Logout bem-sucedido' });
 });
 
 
-// --- Rotas da API do Painel (Protegidas pela Sessão) ---
+// --- Rotas da API do Painel (Protegidas) ---
 const apiRouter = express.Router();
-apiRouter.use(checkAuth); // Protege todas as rotas definidas neste router
+apiRouter.use(checkAuth);
 
 const sshConfig = {
     host: process.env.SSH_HOST,
@@ -84,8 +73,6 @@ const sshConfig = {
     password: process.env.SSH_PASSWORD,
     readyTimeout: 20000
 };
-
-// ... (as rotas da API de bots são adicionadas ao router)
 
 apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
@@ -211,8 +198,14 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     }
 });
 
-app.use('/api', apiRouter); // Aplica o router protegido no prefixo /api
+// Anexe o router protegido ao prefixo /api
+app.use('/api', apiRouter);
+
+// O health check não precisa de autenticação, então fica de fora do apiRouter
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
 
 app.listen(PORT, () => {
-    console.log(`Painel de Controlo de Bots a rodar em http://localhost:${PORT}`);
+    console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
 });
