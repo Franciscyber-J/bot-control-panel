@@ -95,7 +95,6 @@ apiRouter.get('/bots/status', async (req, res) => {
         if (result.code !== 0) throw new Error(result.stderr || 'Falha ao obter a lista de bots.');
         res.json(JSON.parse(result.stdout));
     } catch (error) {
-        console.error("Erro na rota de status:", error.message);
         res.status(500).json({ error: `Falha na rota de status. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -115,7 +114,6 @@ apiRouter.post('/bots/add', async (req, res) => {
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
         res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
     } catch (error) {
-        console.error(`Erro ao adicionar o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -135,7 +133,6 @@ apiRouter.post('/bots/manage', async (req, res) => {
         if (result.code !== 0) throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
         res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.` });
     } catch (error) {
-        console.error(`Erro na rota /api/bots/manage para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -153,15 +150,19 @@ apiRouter.post('/bots/env/:name', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        await ssh.putText(envPath, content);
+        const base64Content = Buffer.from(content).toString('base64');
+        const writeCommand = `echo ${base64Content} | base64 --decode > ${envPath}`;
+        const writeResult = await ssh.execCommand(writeCommand);
+        if (writeResult.code !== 0) {
+            throw new Error(writeResult.stderr || 'Falha ao escrever o ficheiro .env no servidor.');
+        }
         const reloadCommand = `${NODE_PATH} ${PM2_PATH} reload ${name}`;
-        const result = await ssh.execCommand(reloadCommand);
-        if (result.code !== 0) {
-            throw new Error(result.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
+        const reloadResult = await ssh.execCommand(reloadCommand);
+        if (reloadResult.code !== 0) {
+            throw new Error(reloadResult.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
         }
         res.json({ message: `Ficheiro .env para o bot '${name}' atualizado e bot reiniciado com sucesso.` });
     } catch (error) {
-        console.error(`Erro ao atualizar .env para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao atualizar o ficheiro .env. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -178,7 +179,6 @@ apiRouter.delete('/bots/delete/:name', async (req, res) => {
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
         res.json({ message: `Bot '${name}' parado e excluído com sucesso.` });
     } catch (error) {
-        console.error(`Erro ao excluir o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao excluir o bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -195,7 +195,6 @@ apiRouter.get('/bots/logs/:name', async (req, res) => {
         if (result.stderr && !result.stdout) throw new Error(result.stderr);
         res.json({ logs: result.stdout || 'Nenhum log disponível.' });
     } catch (error) {
-        console.error(`Erro ao buscar logs para o bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao buscar logs do bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -231,7 +230,6 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
         }
         res.json({ message: `Deploy do bot '${name}' concluído com sucesso.`, output: fullOutput });
     } catch (error) {
-        console.error(`Erro no deploy do bot ${name}:`, error.message);
         res.status(500).json({ error: `Falha no deploy do bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -254,7 +252,9 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws, request) => {
-    const botName = request.url.split('/').pop();
+    const urlParts = request.url.split('/');
+    const botName = urlParts[urlParts.length - 1];
+    
     if (!botName) {
         ws.close(1008, 'Nome do bot não fornecido.');
         return;
@@ -265,7 +265,7 @@ wss.on('connection', (ws, request) => {
     
     ssh.connect(sshConfig)
         .then(() => {
-            ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw`, {
+            ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw --lines 20`, {
                 onStdout: (chunk) => {
                     if (ws.readyState === ws.OPEN) {
                         ws.send(chunk.toString('utf8'));

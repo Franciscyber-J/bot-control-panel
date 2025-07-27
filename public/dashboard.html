@@ -316,7 +316,7 @@
                         <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')" ${!isOnline ? 'disabled' : ''}>Parar</button>
                     </div>
                     <div class="card-footer-actions">
-                        <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')"><i data-feather="upload-cloud"></i>Enviar .env</button>
+                        <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')" ${!isOnline ? 'disabled' : ''}><i data-feather="upload-cloud"></i>Enviar .env</button>
                         <button class="action-btn-footer" onclick="showLogs('${bot.name}')"><i data-feather="terminal"></i>Logs</button>
                         <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')"><i data-feather="git-pull-request"></i>Atualizar</button>
                         <button class="action-btn-footer danger" onclick="deleteBot('${bot.name}')"><i data-feather="trash-2"></i> Excluir</button>
