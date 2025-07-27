@@ -92,7 +92,7 @@ body::before {
 }
 
 .bot-list-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
     gap: 1.5rem;
 }
 
@@ -160,7 +160,6 @@ body::before {
     border-top: 1px solid var(--border-color); margin-top: 1rem;
     padding-top: 1rem; display: flex; justify-content: flex-end;
     align-items: center; gap: 0.5rem;
-    flex-wrap: wrap; /* Permite que os botões quebrem a linha se necessário */
 }
 .action-btn-footer {
     background: none; border: 1px solid transparent;
@@ -172,7 +171,7 @@ body::before {
 }
 .action-btn-footer i { width: 16px; height: 16px; }
 .action-btn-footer:hover { color: var(--accent-primary); background-color: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.2); }
-.action-btn-footer[onclick*="updateBot"]:hover { color: var(--yellow); background-color: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
+.action-btn-footer[onclick*="updateBot"]:hover, .action-btn-footer[onclick*="showUpdateModal"]:hover { color: var(--yellow); background-color: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
 .action-btn-footer.danger { color: var(--red); }
 .action-btn-footer.danger:hover { color: var(--text-primary); background-color: var(--red); border-color: var(--red); }
 
@@ -189,6 +188,7 @@ body::before {
     border-radius: 12px;
 }
 .modal-content h2 { font-size: 1.5rem; margin-bottom: 2rem; color: var(--text-primary); text-align: center; }
+.modal-description { color: var(--text-secondary); margin-bottom: 1.5rem; text-align: center; font-size: 0.9rem; }
 .form-group { margin-bottom: 1.5rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); }
 .form-group input {

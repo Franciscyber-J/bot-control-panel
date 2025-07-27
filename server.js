@@ -27,7 +27,7 @@ const checkAuth = (req, res, next) => {
     res.redirect('/'); 
 };
 
-app.use(express.json({ limit: '1mb' })); // Aumenta o limite para o corpo do pedido
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -92,6 +92,26 @@ apiRouter.get('/bots/status', async (req, res) => {
     }
 });
 
+apiRouter.post('/bots/add', async (req, res) => {
+    const { name, scriptPath } = req.body;
+    if (!name || !scriptPath) {
+        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
+    }
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+        const command = `${NODE_PATH} ${PM2_PATH} start ${scriptPath} --name ${name}`;
+        const result = await ssh.execCommand(command);
+        if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
+    } catch (error) {
+        console.error(`Erro ao adicionar o bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
 apiRouter.post('/bots/manage', async (req, res) => {
     const { name, action } = req.body;
     if (!name || !['restart', 'stop', 'start'].includes(action)) {
@@ -112,34 +132,24 @@ apiRouter.post('/bots/manage', async (req, res) => {
     }
 });
 
-// [NOVA ROTA] Para fazer o upload do ficheiro .env
 apiRouter.post('/bots/env/:name', async (req, res) => {
     const { name } = req.params;
     const { content, scriptPath } = req.body;
-
     if (!name || !content || !scriptPath) {
-        return res.status(400).json({ error: 'Faltam dados essenciais (nome, conteúdo, caminho do script).' });
+        return res.status(400).json({ error: 'Faltam dados essenciais.' });
     }
-
     const botDirectory = path.dirname(scriptPath);
     const envPath = path.join(botDirectory, '.env');
-
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-
-        // Escreve o novo conteúdo no ficheiro .env no servidor
         await ssh.putText(envPath, content);
-        
-        // Reinicia o bot para aplicar as novas variáveis de ambiente
         const reloadCommand = `${NODE_PATH} ${PM2_PATH} reload ${name}`;
         const result = await ssh.execCommand(reloadCommand);
         if (result.code !== 0) {
             throw new Error(result.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
         }
-        
         res.json({ message: `Ficheiro .env para o bot '${name}' atualizado e bot reiniciado com sucesso.` });
-
     } catch (error) {
         console.error(`Erro ao atualizar .env para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao atualizar o ficheiro .env. Detalhe: ${error.message}` });
@@ -147,7 +157,6 @@ apiRouter.post('/bots/env/:name', async (req, res) => {
         if (ssh.connection) ssh.dispose();
     }
 });
-
 
 apiRouter.delete('/bots/delete/:name', async (req, res) => {
     const { name } = req.params;
@@ -185,23 +194,26 @@ apiRouter.get('/bots/logs/:name', async (req, res) => {
 
 apiRouter.post('/bots/update/:name', async (req, res) => {
     const { name } = req.params;
-    const botData = req.body.scriptPath;
-    if (!name || !botData) {
-        return res.status(400).json({ error: 'Nome e caminho do script do bot são obrigatórios.' });
+    const { scriptPath, gitUrl } = req.body;
+    if (!name || !scriptPath || !gitUrl) {
+        return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
     }
-    const botDirectory = path.dirname(botData);
+    const botDirectory = path.dirname(scriptPath);
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
+        // Sequência de deploy mais robusta
         const commands = [
-            'git pull',
-            'npm install',
+            `git -C ${botDirectory} remote set-url origin ${gitUrl}`,
+            `git -C ${botDirectory} fetch origin`,
+            `git -C ${botDirectory} reset --hard origin/main`, // Assumindo que a branch principal é 'main'
+            `npm --prefix ${botDirectory} install`,
             `${NODE_PATH} ${PM2_PATH} reload ${name}`
         ];
-        let fullOutput = `Iniciando deploy para o bot '${name}' no diretório '${botDirectory}'...\n\n`;
+        let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
         for (const command of commands) {
             fullOutput += `> Executando: ${command}\n`;
-            const result = await ssh.execCommand(command, { cwd: botDirectory });
+            const result = await ssh.execCommand(command);
             if (result.code !== 0) {
                 fullOutput += `ERRO:\n${result.stderr}`;
                 throw new Error(`O comando '${command}' falhou:\n${result.stderr}`);
@@ -216,7 +228,6 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
         if (ssh.connection) ssh.dispose();
     }
 });
-
 
 app.use('/api', apiRouter);
 
