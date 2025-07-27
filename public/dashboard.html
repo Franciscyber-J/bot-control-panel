@@ -22,10 +22,10 @@
         </header>
 
         <main id="bot-list" class="bot-list-grid">
-        </main>
+            </main>
 
         <footer class="panel-footer">
-            <p>Sincronização automática em <span id="countdown">30</span>s. Última verificação: <span id="last-updated">Nunca</span></p>
+            <p>Status da Conexão: <span id="connection-status">Conectando...</span></p>
         </footer>
     </div>
 
@@ -114,34 +114,32 @@
     <input type="file" id="env-file-input" style="display: none;" accept=".env">
 
     <script>
+        // Global variable for the log WebSocket so it can be managed
         let currentLogSocket = null;
 
         function showNotification(title, message, type = 'info') {
-            const notificationTitle = document.getElementById('notification-title');
-            const notificationMessage = document.getElementById('notification-message');
-            const notificationModal = document.getElementById('notification-modal');
-            notificationTitle.textContent = title;
-            notificationMessage.textContent = message;
-            notificationModal.dataset.type = type;
-            notificationModal.style.display = 'flex';
+            const modal = document.getElementById('notification-modal');
+            modal.querySelector('#notification-title').textContent = title;
+            modal.querySelector('#notification-message').textContent = message;
+            modal.style.display = 'flex';
         }
 
         function showConfirmation(title, message) {
-            const confirmationTitle = document.getElementById('confirmation-title');
-            const confirmationMessage = document.getElementById('confirmation-message');
-            const confirmationModal = document.getElementById('confirmation-modal');
-            const confirmBtnYes = document.getElementById('confirm-btn-yes');
-            const confirmBtnNo = document.getElementById('confirm-btn-no');
-            confirmationTitle.textContent = title;
-            confirmationMessage.textContent = message;
-            confirmationModal.style.display = 'flex';
             return new Promise((resolve) => {
-                confirmBtnYes.onclick = () => {
-                    confirmationModal.style.display = 'none';
+                const modal = document.getElementById('confirmation-modal');
+                modal.querySelector('#confirmation-title').textContent = title;
+                modal.querySelector('#confirmation-message').textContent = message;
+                modal.style.display = 'flex';
+
+                const btnYes = document.getElementById('confirm-btn-yes');
+                const btnNo = document.getElementById('confirm-btn-no');
+
+                btnYes.onclick = () => {
+                    modal.style.display = 'none';
                     resolve(true);
                 };
-                confirmBtnNo.onclick = () => {
-                    confirmationModal.style.display = 'none';
+                btnNo.onclick = () => {
+                    modal.style.display = 'none';
                     resolve(false);
                 };
             });
@@ -149,18 +147,23 @@
 
         async function fetchWithAuth(url, options = {}) {
             const response = await fetch(url, options);
+            if (response.status === 401) {
+                window.location.href = '/';
+                throw new Error('Não autorizado');
+            }
             if (!response.ok) {
-                if (response.status === 401) window.location.href = '/';
                 const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
                 throw new Error(errorData.error);
             }
             return response.json();
         }
-
+        
+        // --- Bot Management Functions ---
         async function manageBot(name, action) {
             const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
-            const confirmed = await showConfirmation(`Confirmar Ação`, `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
+            const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
             if (!confirmed) return;
+
             try {
                 const result = await fetchWithAuth('/api/bots/manage', {
                     method: 'POST',
@@ -168,7 +171,7 @@
                     body: JSON.stringify({ name, action })
                 });
                 showNotification('Sucesso', result.message);
-                await loadBots();
+                // No need to call loadBots(), WebSocket will update the UI
             } catch (error) {
                 showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
             }
@@ -177,15 +180,15 @@
         async function deleteBot(name) {
             const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`);
             if (!confirmed) return;
+
             try {
                 const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
                 showNotification('Sucesso', result.message);
-                await loadBots();
             } catch (error) {
                 showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error');
             }
         }
-        
+
         async function showLogs(name) {
             const logModal = document.getElementById('log-modal');
             const logModalTitle = document.getElementById('log-modal-title');
@@ -196,109 +199,107 @@
             logModalTitle.textContent = `Logs de ${name} (a conectar...)`;
             logContent.textContent = 'A carregar histórico de logs...';
 
+            // First, get historical logs via API
             try {
                 const result = await fetchWithAuth(`/api/bots/logs/${name}`);
                 logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
                 logContainer.scrollTop = logContainer.scrollHeight;
             } catch (error) {
                 logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`;
-                return;
             }
-
+            
+            // Then, establish a WebSocket connection for real-time logs
             if (currentLogSocket) currentLogSocket.close();
 
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/${name}`;
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs/${name}`;
             currentLogSocket = new WebSocket(wsUrl);
 
-            currentLogSocket.onopen = () => {
-                logModalTitle.textContent = `Logs de ${name} (Conectado)`;
-            };
+            currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; };
             currentLogSocket.onmessage = (event) => {
                 logContent.textContent += event.data;
                 logContainer.scrollTop = logContainer.scrollHeight;
             };
-            currentLogSocket.onerror = (error) => {
-                logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n';
-                console.error('Erro no WebSocket:', error);
-            };
-            currentLogSocket.onclose = () => {
-                logModalTitle.textContent = `Logs de ${name} (Desconectado)`;
-            };
+            currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n'; };
+            currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
         }
 
         function showUpdateModal(name, scriptPath) {
-            const updateSourceModal = document.getElementById('update-source-modal');
-            const updateSourceForm = document.getElementById('update-source-form');
-            const botGitUrlInput = document.getElementById('bot-git-url');
-            updateSourceModal.style.display = 'flex';
-            botGitUrlInput.value = '';
-            updateSourceForm.onsubmit = (event) => {
+            const modal = document.getElementById('update-source-modal');
+            const form = document.getElementById('update-source-form');
+            const gitUrlInput = document.getElementById('bot-git-url');
+            modal.style.display = 'flex';
+            gitUrlInput.value = '';
+            
+            form.onsubmit = (event) => {
                 event.preventDefault();
-                const gitUrl = botGitUrlInput.value;
-                updateSourceModal.style.display = 'none';
+                const gitUrl = gitUrlInput.value;
+                modal.style.display = 'none';
                 updateBot(name, scriptPath, gitUrl);
             };
         }
 
         async function updateBot(name, scriptPath, gitUrl) {
-            const updateModal = document.getElementById('update-modal');
-            const updateModalTitle = document.getElementById('update-modal-title');
-            const updateContent = document.getElementById('update-content');
-            updateModal.style.display = 'flex';
-            updateModalTitle.textContent = `Deploy do Bot: ${name}`;
-            updateContent.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
+            const modal = document.getElementById('update-modal');
+            const title = document.getElementById('update-modal-title');
+            const content = document.getElementById('update-content');
+            
+            modal.style.display = 'flex';
+            title.textContent = `Deploy do Bot: ${name}`;
+            content.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
+
             try {
                 const result = await fetchWithAuth(`/api/bots/update/${name}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ scriptPath, gitUrl })
                 });
-                updateContent.textContent = result.output;
-                await loadBots();
+                content.textContent = result.output;
             } catch (error) {
-                updateContent.textContent = `ERRO NO DEPLOY: ${error.message}`;
+                content.textContent = `ERRO NO DEPLOY: ${error.message}`;
             }
         }
 
         async function uploadEnvFile(name, scriptPath) {
-            const envFileInput = document.getElementById('env-file-input');
-            envFileInput.onchange = async (event) => {
+            const fileInput = document.getElementById('env-file-input');
+            fileInput.onchange = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
+
                 const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
                 if (!confirmed) {
-                    envFileInput.value = '';
+                    fileInput.value = '';
                     return;
                 }
+
                 const reader = new FileReader();
                 reader.onload = async (e) => {
-                    const content = e.target.result;
                     try {
                         const result = await fetchWithAuth(`/api/bots/env/${name}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content, scriptPath })
+                            body: JSON.stringify({ content: e.target.result, scriptPath })
                         });
                         showNotification('Sucesso', result.message);
-                        await loadBots();
                     } catch (error) {
                         showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error');
                     } finally {
-                        envFileInput.value = '';
+                        fileInput.value = '';
                     }
                 };
                 reader.readAsText(file);
             };
-            envFileInput.click();
+            fileInput.click();
         }
         
+        // --- UI Rendering ---
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
             const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
             const statusText = isOnline ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
             const scriptPath = bot.pm2_env.pm_exec_path;
+
             return `
                 <div class="bot-card">
                     <div class="card-header">
@@ -316,7 +317,7 @@
                         <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')" ${!isOnline ? 'disabled' : ''}>Parar</button>
                     </div>
                     <div class="card-footer-actions">
-                        <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')" ${!isOnline ? 'disabled' : ''}><i data-feather="upload-cloud"></i>Enviar .env</button>
+                        <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')"><i data-feather="upload-cloud"></i>Enviar .env</button>
                         <button class="action-btn-footer" onclick="showLogs('${bot.name}')"><i data-feather="terminal"></i>Logs</button>
                         <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')"><i data-feather="git-pull-request"></i>Atualizar</button>
                         <button class="action-btn-footer danger" onclick="deleteBot('${bot.name}')"><i data-feather="trash-2"></i> Excluir</button>
@@ -324,37 +325,56 @@
                 </div>
             `;
         }
-        
-        async function loadBots() {
+
+        function loadBots(bots = []) {
             const botListContainer = document.getElementById('bot-list');
-            const lastUpdatedElement = document.getElementById('last-updated');
-            try {
-                const bots = await fetchWithAuth('/api/bots/status');
-                botListContainer.innerHTML = bots.length > 0 ? bots.map(renderBot).join('') : '<div class="bot-card"><p class="info-message">[RESPOSTA VAZIA] :: Nenhum processo encontrado.</p></div>';
-                lastUpdatedElement.textContent = new Date().toLocaleTimeString('pt-BR');
-            } catch (error) {
-                if(error.message.includes('401')) return;
-                botListContainer.innerHTML = `<div class="bot-card"><p class="error-message">[ERRO DE CONEXÃO] :: ${error.message}</p></div>`;
-            } finally {
-                feather.replace();
+            if (bots.length > 0) {
+                botListContainer.innerHTML = bots.map(renderBot).join('');
+            } else {
+                botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>';
             }
+            feather.replace();
         }
 
-        function startCountdown() {
-            const countdownElement = document.getElementById('countdown');
-            clearInterval(refreshTimer);
-            countdown = REFRESH_INTERVAL;
-            countdownElement.textContent = countdown.toString().padStart(2, '0');
-            refreshTimer = setInterval(async () => {
-                countdown--;
-                countdownElement.textContent = countdown.toString().padStart(2, '0');
-                if (countdown <= 0) {
-                    await loadBots();
-                    countdown = REFRESH_INTERVAL;
+        // --- WebSocket Connection for Dashboard ---
+        function connectDashboardSocket() {
+            const statusElement = document.getElementById('connection-status');
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
+            const socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                statusElement.textContent = 'Conectado';
+                statusElement.style.color = 'var(--green)';
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'statusUpdate') {
+                        loadBots(message.data);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e);
                 }
-            }, 1000);
+            };
+
+            socket.onclose = () => {
+                statusElement.textContent = 'Desconectado. Tentando reconectar...';
+                statusElement.style.color = 'var(--red)';
+                // Simple reconnect logic
+                setTimeout(connectDashboardSocket, 3000);
+            };
+
+            socket.onerror = (error) => {
+                statusElement.textContent = 'Erro de Conexão';
+                statusElement.style.color = 'var(--red)';
+                console.error('WebSocket Error:', error);
+                socket.close();
+            };
         }
 
+        // --- Event Listeners and Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             const addBotBtn = document.getElementById('add-bot-btn');
             const addBotModal = document.getElementById('add-bot-modal');
@@ -397,7 +417,6 @@
                     addBotModal.style.display = 'none';
                     addBotForm.reset();
                     showNotification('Sucesso', result.message);
-                    await loadBots();
                 } catch (error) {
                     showNotification('Falha ao Adicionar', `ERRO: ${error.message}`, 'error');
                 }
@@ -405,7 +424,7 @@
 
             logoutBtn.addEventListener('click', async () => {
                 const confirmed = await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?');
-                if(confirmed) {
+                if (confirmed) {
                     try {
                         await fetch('/api/logout', { method: 'POST' });
                         window.location.href = '/';
@@ -415,10 +434,9 @@
                 }
             });
             
+            // Initial call to load icons and connect WebSocket
             feather.replace();
-            loadBots().then(() => {
-                startCountdown();
-            });
+            connectDashboardSocket();
         });
     </script>
 </body>

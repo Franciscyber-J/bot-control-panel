@@ -6,6 +6,7 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const cookieSession = require('cookie-session');
 const cookieParser = require('cookie-parser');
+const url = require('url');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,7 +18,7 @@ app.set('trust proxy', 1);
 
 const sessionParser = cookieSession({
     name: 'bcp-session',
-    keys: [process.env.SESSION_SECRET],
+    keys: [process.env.SESSION_SECRET || 'default-secret-key'],
     maxAge: 24 * 60 * 60 * 1000,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production'
@@ -33,7 +34,7 @@ const checkAuth = (req, res, next) => {
     if (req.originalUrl.startsWith('/api/')) {
         return res.status(401).json({ error: 'Não autorizado. Por favor, faça login.' });
     }
-    res.redirect('/'); 
+    res.redirect('/');
 };
 
 app.use(express.json({ limit: '1mb' }));
@@ -82,37 +83,60 @@ const sshConfig = {
     readyTimeout: 20000
 };
 
-const NODE_PATH = '/root/.nvm/versions/node/v18.20.8/bin/node';
-const PM2_PATH = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-const NPM_PATH = '/root/.nvm/versions/node/v18.20.8/bin/npm';
+const NODE_PATH = process.env.NODE_PATH || '/root/.nvm/versions/node/v18.20.8/bin/node';
+const PM2_PATH = process.env.PM2_PATH || '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+const NPM_PATH = process.env.NPM_PATH || '/root/.nvm/versions/node/v18.20.8/bin/npm';
 
-apiRouter.get('/bots/status', async (req, res) => {
+// --- WebSocket Status Broadcasting ---
+const dashboardClients = new Set();
+
+async function getBotsStatus() {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} jlist`;
         const result = await ssh.execCommand(command);
-        if (result.code !== 0) throw new Error(result.stderr || 'Falha ao obter a lista de bots.');
-        res.json(JSON.parse(result.stdout));
+        if (result.code !== 0) {
+            console.error('Falha ao obter a lista de bots:', result.stderr);
+            return [];
+        }
+        return JSON.parse(result.stdout);
     } catch (error) {
-        res.status(500).json({ error: `Falha na rota de status. Detalhe: ${error.message}` });
+        console.error(`Falha ao buscar status dos bots. Detalhe: ${error.message}`);
+        return [];
     } finally {
         if (ssh.connection) ssh.dispose();
     }
-});
+}
 
+async function broadcastStatus() {
+    if (dashboardClients.size === 0) return;
+    const status = await getBotsStatus();
+    const message = JSON.stringify({ type: 'statusUpdate', data: status });
+    dashboardClients.forEach(client => {
+        if (client.readyState === client.OPEN) {
+            client.send(message);
+        }
+    });
+}
+
+// Broadcast status periodically
+setInterval(broadcastStatus, 5000); // Update every 5 seconds
+
+// --- API Routes ---
 apiRouter.post('/bots/add', async (req, res) => {
     const { name, scriptPath } = req.body;
-    if (!name || !scriptPath) {
-        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
-    }
+    if (!name || !scriptPath) return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
+    
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} start ${scriptPath} --name ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        
         res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
+        await broadcastStatus();
     } catch (error) {
         res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
     } finally {
@@ -122,16 +146,17 @@ apiRouter.post('/bots/add', async (req, res) => {
 
 apiRouter.post('/bots/manage', async (req, res) => {
     const { name, action } = req.body;
-    if (!name || !['restart', 'stop', 'start'].includes(action)) {
-        return res.status(400).json({ error: 'Ação ou nome de bot inválido.' });
-    }
+    if (!name || !['restart', 'stop', 'start'].includes(action)) return res.status(400).json({ error: 'Ação ou nome de bot inválido.' });
+    
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} ${action} ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
+        
         res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.` });
+        await broadcastStatus();
     } catch (error) {
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
     } finally {
@@ -142,9 +167,8 @@ apiRouter.post('/bots/manage', async (req, res) => {
 apiRouter.post('/bots/env/:name', async (req, res) => {
     const { name } = req.params;
     const { content, scriptPath } = req.body;
-    if (!name || !content || !scriptPath) {
-        return res.status(400).json({ error: 'Faltam dados essenciais.' });
-    }
+    if (!name || !content || !scriptPath) return res.status(400).json({ error: 'Faltam dados essenciais.' });
+
     const botDirectory = path.dirname(scriptPath);
     const envPath = path.join(botDirectory, '.env');
     const ssh = new NodeSSH();
@@ -153,15 +177,14 @@ apiRouter.post('/bots/env/:name', async (req, res) => {
         const base64Content = Buffer.from(content).toString('base64');
         const writeCommand = `echo ${base64Content} | base64 --decode > ${envPath}`;
         const writeResult = await ssh.execCommand(writeCommand);
-        if (writeResult.code !== 0) {
-            throw new Error(writeResult.stderr || 'Falha ao escrever o ficheiro .env no servidor.');
-        }
+        if (writeResult.code !== 0) throw new Error(writeResult.stderr || 'Falha ao escrever o ficheiro .env no servidor.');
+
         const reloadCommand = `${NODE_PATH} ${PM2_PATH} reload ${name}`;
         const reloadResult = await ssh.execCommand(reloadCommand);
-        if (reloadResult.code !== 0) {
-            throw new Error(reloadResult.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
-        }
+        if (reloadResult.code !== 0) throw new Error(reloadResult.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
+        
         res.json({ message: `Ficheiro .env para o bot '${name}' atualizado e bot reiniciado com sucesso.` });
+        await broadcastStatus();
     } catch (error) {
         res.status(500).json({ error: `Falha ao atualizar o ficheiro .env. Detalhe: ${error.message}` });
     } finally {
@@ -177,7 +200,9 @@ apiRouter.delete('/bots/delete/:name', async (req, res) => {
         const command = `${NODE_PATH} ${PM2_PATH} delete ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
+        
         res.json({ message: `Bot '${name}' parado e excluído com sucesso.` });
+        await broadcastStatus();
     } catch (error) {
         res.status(500).json({ error: `Falha ao excluir o bot. Detalhe: ${error.message}` });
     } finally {
@@ -204,9 +229,8 @@ apiRouter.get('/bots/logs/:name', async (req, res) => {
 apiRouter.post('/bots/update/:name', async (req, res) => {
     const { name } = req.params;
     const { scriptPath, gitUrl } = req.body;
-    if (!name || !scriptPath || !gitUrl) {
-        return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
-    }
+    if (!name || !scriptPath || !gitUrl) return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
+
     const botDirectory = path.dirname(scriptPath);
     const ssh = new NodeSSH();
     try {
@@ -215,7 +239,7 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
             `git -C ${botDirectory} remote set-url origin ${gitUrl}`,
             `git -C ${botDirectory} fetch origin`,
             `git -C ${botDirectory} reset --hard origin/main`,
-            `${NODE_PATH} ${NPM_PATH} --prefix ${botDirectory} install`,
+            `${NPM_PATH} --prefix ${botDirectory} install`,
             `${NODE_PATH} ${PM2_PATH} reload ${name}`
         ];
         let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
@@ -229,6 +253,7 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
             fullOutput += `${result.stdout}\n\n`;
         }
         res.json({ message: `Deploy do bot '${name}' concluído com sucesso.`, output: fullOutput });
+        await broadcastStatus();
     } catch (error) {
         res.status(500).json({ error: `Falha no deploy do bot. Detalhe: ${error.message}` });
     } finally {
@@ -236,8 +261,10 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     }
 });
 
+
 app.use('/api', apiRouter);
 
+// --- WebSocket Server Upgrade ---
 server.on('upgrade', (request, socket, head) => {
     sessionParser(request, {}, () => {
         if (!request.session || !request.session.isAuthenticated) {
@@ -252,46 +279,64 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws, request) => {
-    const urlParts = request.url.split('/');
-    const botName = urlParts[urlParts.length - 1];
+    const { pathname } = url.parse(request.url);
     
-    if (!botName) {
-        ws.close(1008, 'Nome do bot não fornecido.');
+    // Connection for Dashboard Status Updates
+    if (pathname === '/ws/dashboard') {
+        dashboardClients.add(ws);
+        console.log('Cliente do dashboard conectado. Total:', dashboardClients.size);
+
+        // Send initial status immediately
+        getBotsStatus().then(status => {
+            ws.send(JSON.stringify({ type: 'statusUpdate', data: status }));
+        });
+
+        ws.on('close', () => {
+            dashboardClients.delete(ws);
+            console.log('Cliente do dashboard desconectado. Total:', dashboardClients.size);
+        });
         return;
     }
 
-    console.log(`Cliente WebSocket conectado para os logs de: ${botName}`);
-    const ssh = new NodeSSH();
-    
-    ssh.connect(sshConfig)
-        .then(() => {
-            ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw --lines 20`, {
-                onStdout: (chunk) => {
-                    if (ws.readyState === ws.OPEN) {
-                        ws.send(chunk.toString('utf8'));
-                    }
-                },
-                onStderr: (chunk) => {
-                    if (ws.readyState === ws.OPEN) {
-                        ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
-                    }
-                }
-            });
-        })
-        .catch(err => {
-            console.error(`Erro na conexão SSH ou comando para logs de ${botName}:`, err);
-            if (ws.readyState === ws.OPEN) {
-                ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
-            }
-        });
-
-    ws.on('close', () => {
-        console.log(`Cliente WebSocket desconectado para os logs de: ${botName}`);
-        if (ssh.connection) {
-            ssh.dispose();
+    // Connection for Individual Bot Logs
+    const logMatch = pathname.match(/^\/ws\/logs\/(.+)$/);
+    if (logMatch) {
+        const botName = logMatch[1];
+        if (!botName) {
+            ws.close(1008, 'Nome do bot não fornecido.');
+            return;
         }
-    });
+
+        console.log(`Cliente WebSocket conectado para os logs de: ${botName}`);
+        const ssh = new NodeSSH();
+
+        ssh.connect(sshConfig)
+            .then(() => {
+                ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw --lines 20`, {
+                    onStdout: (chunk) => {
+                        if (ws.readyState === ws.OPEN) ws.send(chunk.toString('utf8'));
+                    },
+                    onStderr: (chunk) => {
+                        if (ws.readyState === ws.OPEN) ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
+                    }
+                });
+            })
+            .catch(err => {
+                console.error(`Erro na conexão SSH ou comando para logs de ${botName}:`, err);
+                if (ws.readyState === ws.OPEN) ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
+            });
+
+        ws.on('close', () => {
+            console.log(`Cliente WebSocket desconectado para os logs de: ${botName}`);
+            if (ssh.connection) ssh.dispose();
+        });
+        return;
+    }
+
+    // No match, close connection
+    ws.close(1002, 'Endpoint WebSocket inválido.');
 });
+
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
