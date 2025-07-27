@@ -75,6 +75,7 @@ const sshConfig = {
 
 const NODE_PATH = '/root/.nvm/versions/node/v18.20.8/bin/node';
 const PM2_PATH = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
+const NPM_PATH = '/root/.nvm/versions/node/v18.20.8/bin/npm'; // Caminho para o NPM
 
 apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
@@ -202,12 +203,11 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        // Sequência de deploy mais robusta
         const commands = [
             `git -C ${botDirectory} remote set-url origin ${gitUrl}`,
             `git -C ${botDirectory} fetch origin`,
-            `git -C ${botDirectory} reset --hard origin/main`, // Assumindo que a branch principal é 'main'
-            `npm --prefix ${botDirectory} install`,
+            `git -C ${botDirectory} reset --hard origin/main`,
+            `${NODE_PATH} ${NPM_PATH} --prefix ${botDirectory} install`, // Comando NPM corrigido
             `${NODE_PATH} ${PM2_PATH} reload ${name}`
         ];
         let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;

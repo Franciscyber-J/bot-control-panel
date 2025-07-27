@@ -101,7 +101,7 @@ body::before {
     backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 1.5rem 1.8rem; /* Aumentado o padding horizontal */
+    padding: 1.5rem 1.8rem;
     display: flex; flex-direction: column;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -159,17 +159,20 @@ body::before {
 .card-footer-actions {
     border-top: 1px solid var(--border-color); margin-top: 1rem;
     padding-top: 1rem; display: flex; justify-content: flex-end;
-    align-items: center; gap: 0.5rem;
+    align-items: center; gap: 0.25rem; /* Reduzido o espaçamento */
 }
 .action-btn-footer {
     background: none; border: 1px solid transparent;
-    font-family: var(--font-family); font-size: 0.85rem; font-weight: 700;
-    padding: 0.5rem 0.75rem; border-radius: 6px;
+    font-family: var(--font-family); font-size: 0.8rem; /* Reduzida a fonte */
+    font-weight: 700;
+    padding: 0.5rem; /* Reduzido o padding */
+    border-radius: 6px;
     color: var(--text-secondary); cursor: pointer;
     transition: all 0.2s ease;
-    display: flex; align-items: center; gap: 0.5rem;
+    display: flex; align-items: center; gap: 0.4rem;
+    white-space: nowrap; /* Impede que o texto quebre a linha */
 }
-.action-btn-footer i { width: 16px; height: 16px; }
+.action-btn-footer i { width: 15px; height: 15px; }
 .action-btn-footer:hover { color: var(--accent-primary); background-color: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.2); }
 .action-btn-footer[onclick*="updateBot"]:hover, .action-btn-footer[onclick*="showUpdateModal"]:hover { color: var(--yellow); background-color: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
 .action-btn-footer.danger { color: var(--red); }
