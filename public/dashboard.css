@@ -149,30 +149,22 @@ body::before {
     cursor: pointer; font-weight: 700;
     transition: all 0.2s ease;
 }
-.action-btn-card:hover { color: var(--text-primary); border-color: var(--accent-primary); background-color: rgba(59, 130, 246, 0.2); }
-.action-btn-card.stop:hover { border-color: var(--red); background-color: rgba(239, 68, 68, 0.2); color: var(--text-primary); }
-
+.action-btn-card:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-primary); background-color: rgba(59, 130, 246, 0.2); }
+.action-btn-card.stop:hover:not(:disabled) { border-color: var(--red); background-color: rgba(239, 68, 68, 0.2); color: var(--text-primary); }
 .action-btn-card:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-    background-color: transparent;
-    border-color: var(--border-color);
-    color: var(--text-secondary);
-}
-.action-btn-card:disabled:hover {
-    background-color: transparent;
-    border-color: var(--border-color);
-    color: var(--text-secondary);
 }
 
 .card-footer-actions {
     border-top: 1px solid var(--border-color); margin-top: 1rem;
-    padding-top: 1rem; display: flex; justify-content: space-between;
-    align-items: center; gap: 0.75rem;
+    padding-top: 1rem; display: flex; justify-content: flex-end;
+    align-items: center; gap: 0.5rem;
+    flex-wrap: wrap; /* Permite que os botões quebrem a linha se necessário */
 }
 .action-btn-footer {
     background: none; border: 1px solid transparent;
-    font-family: var(--font-family); font-size: 0.9rem; font-weight: 700;
+    font-family: var(--font-family); font-size: 0.85rem; font-weight: 700;
     padding: 0.5rem 0.75rem; border-radius: 6px;
     color: var(--text-secondary); cursor: pointer;
     transition: all 0.2s ease;
@@ -224,10 +216,4 @@ body::before {
     text-align: center; border-top: 1px solid var(--border-color);
     padding-top: 1.5rem; margin-top: 2rem;
     font-size: 0.9rem; color: var(--text-secondary);
-}
-/* Adicionar ao final do ficheiro dashboard.css */
-.action-btn-footer[onclick*="uploadEnvFile"]:hover {
-    color: var(--green);
-    background-color: rgba(16, 185, 129, 0.1);
-    border-color: rgba(16, 185, 129, 0.2);
 }
