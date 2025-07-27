@@ -83,19 +83,19 @@ body {
 .input-group {
     position: relative;
     margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
 }
 .input-group > i {
     position: absolute;
     left: 15px;
-    top: 50%;
-    transform: translateY(-50%);
     color: var(--secondary-text);
     width: 1rem;
     height: 1rem;
 }
 .input-group input {
     width: 100%;
-    padding: 1rem 3.5rem 1rem 3rem; /* Aumenta o padding direito para o ícone */
+    padding: 1rem 3.5rem 1rem 3rem;
     background-color: var(--primary-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -110,18 +110,13 @@ body {
     box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
 }
 
-/* Correção do Ícone "Olhinho" */
 .toggle-password {
     position: absolute;
-    right: 0;
-    top: 0;
-    height: 100%;
-    width: 50px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    right: 15px;
     cursor: pointer;
     color: var(--secondary-text);
+    display: flex;
+    align-items: center;
 }
 .toggle-password:hover {
     color: var(--primary-text);

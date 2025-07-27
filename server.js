@@ -7,20 +7,16 @@ const cookieSession = require('cookie-session');
 const app = express();
 const PORT = process.env.PORT || 10001;
 
-// [CORREÇÃO] Informa ao Express para confiar no proxy reverso da Render.
-// Isto é essencial para que os cookies seguros funcionem corretamente em produção.
 app.set('trust proxy', 1);
 
-// --- Configuração da Sessão com cookie-session ---
 app.use(cookieSession({
     name: 'bcp-session',
     keys: [process.env.SESSION_SECRET],
-    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    maxAge: 24 * 60 * 60 * 1000,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production'
 }));
 
-// --- Middleware de Autenticação Baseado em Sessão ---
 const checkAuth = (req, res, next) => {
     if (req.session.isAuthenticated) {
         return next();
@@ -34,7 +30,6 @@ const checkAuth = (req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Rotas das Páginas ---
 app.get('/', (req, res) => {
     if (req.session.isAuthenticated) {
         return res.redirect('/dashboard');
@@ -46,20 +41,16 @@ app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// --- Rotas da API de Autenticação (Públicas) ---
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
         return res.status(500).json({ error: 'As credenciais de administrador não estão configuradas no servidor.' });
     }
-
     if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASSWORD) {
         req.session.isAuthenticated = true;
         req.session.user = username;
         return res.status(200).json({ message: 'Login bem-sucedido' });
     }
-    
     res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
@@ -72,7 +63,6 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
-// --- Rotas da API do Painel (Protegidas) ---
 const apiRouter = express.Router();
 apiRouter.use(checkAuth);
 
@@ -85,15 +75,43 @@ const sshConfig = {
 
 apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
+    const BOTS_DIRECTORY = '/root/bots';
+    const performDiscovery = req.query.discover === 'true';
+
     try {
         await ssh.connect(sshConfig);
-        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} jlist`;
-        const result = await ssh.execCommand(command, { cwd: '/root' });
-        if (result.code !== 0) throw new Error(result.stderr || 'Falha ao listar bots.');
-        res.json(JSON.parse(result.stdout));
+
+        if (performDiscovery) {
+            console.log('Executando rotina de descoberta de novos bots...');
+            const pm2ListResult = await ssh.execCommand('pm2 jlist');
+            if (pm2ListResult.code !== 0) throw new Error(pm2ListResult.stderr || 'Falha ao executar pm2 jlist.');
+            const managedBots = JSON.parse(pm2ListResult.stdout);
+            const managedBotNames = managedBots.map(bot => bot.name);
+
+            const dirListResult = await ssh.execCommand(`ls ${BOTS_DIRECTORY}`);
+            if (dirListResult.code !== 0) throw new Error(`Não foi possível listar o diretório ${BOTS_DIRECTORY}.`);
+            const potentialBotNames = dirListResult.stdout.split('\n').filter(Boolean);
+
+            const newBotsToStart = potentialBotNames.filter(name => !managedBotNames.includes(name));
+
+            if (newBotsToStart.length > 0) {
+                console.log(`Novos bots encontrados: ${newBotsToStart.join(', ')}. A iniciar...`);
+                for (const botName of newBotsToStart) {
+                    const scriptPath = `${BOTS_DIRECTORY}/${botName}/index.js`;
+                    const startCommand = `pm2 start ${scriptPath} --name ${botName}`;
+                    await ssh.execCommand(startCommand);
+                }
+            }
+        }
+
+        const finalListResult = await ssh.execCommand('pm2 jlist');
+        if (finalListResult.code !== 0) throw new Error(finalListResult.stderr || 'Falha ao obter a lista final de bots.');
+        
+        res.json(JSON.parse(finalListResult.stdout));
+
     } catch (error) {
-        console.error("Erro na rota /api/bots/status:", error.message);
-        res.status(500).json({ error: `Falha ao conectar ou executar o comando no servidor remoto. Detalhe: ${error.message}` });
+        console.error("Erro na rota de status:", error.message);
+        res.status(500).json({ error: `Falha na rota de status. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
     }
@@ -114,26 +132,6 @@ apiRouter.post('/bots/manage', async (req, res) => {
     } catch (error) {
         console.error(`Erro na rota /api/bots/manage para ${name}:`, error.message);
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
-    } finally {
-        if (ssh.connection) ssh.dispose();
-    }
-});
-
-apiRouter.post('/bots/add', async (req, res) => {
-    const { name, scriptPath } = req.body;
-    if (!name || !scriptPath) {
-        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
-    }
-    const ssh = new NodeSSH();
-    try {
-        await ssh.connect(sshConfig);
-        const command = `${'/root/.nvm/versions/node/v18.20.8/bin/node'} ${'/root/.nvm/versions/node/v18.20.8/bin/pm2'} start ${scriptPath} --name ${name}`;
-        const result = await ssh.execCommand(command, { cwd: '/root' });
-        if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
-        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
-    } catch (error) {
-        console.error(`Erro ao adicionar o bot ${name}:`, error.message);
-        res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
     }
