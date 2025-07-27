@@ -16,7 +16,6 @@
         <header class="panel-header">
             <h1>Painel de Controlo de Bots</h1>
             <div class="header-controls">
-                <button id="add-bot-btn" class="action-btn primary">Adicionar Novo Bot</button>
                 <button id="logout-btn" class="action-btn">Logout</button>
             </div>
         </header>
@@ -27,26 +26,6 @@
         <footer class="panel-footer">
             <p>Sincronização automática em <span id="countdown">30</span>s. Última verificação: <span id="last-updated">Nunca</span></p>
         </footer>
-    </div>
-
-    <div id="add-bot-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2>Adicionar Novo Bot</h2>
-            <form id="add-bot-form">
-                <div class="form-group">
-                    <label for="bot-name">Nome do Processo (ex: meu-bot)</label>
-                    <input type="text" id="bot-name" required>
-                </div>
-                <div class="form-group">
-                    <label for="bot-script">Caminho do Script no Servidor (ex: /root/meu-bot/index.js)</label>
-                    <input type="text" id="bot-script" required>
-                </div>
-                <div class="modal-actions">
-                    <button type="submit" class="action-btn primary">Adicionar e Iniciar</button>
-                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
-                </div>
-            </form>
-        </div>
     </div>
 
     <div id="log-modal" class="modal-overlay" style="display: none;">
@@ -99,10 +78,6 @@
         const countdownElement = document.getElementById('countdown');
         const lastUpdatedElement = document.getElementById('last-updated');
         
-        const addBotBtn = document.getElementById('add-bot-btn');
-        const addBotModal = document.getElementById('add-bot-modal');
-        const addBotForm = document.getElementById('add-bot-form');
-
         const logModal = document.getElementById('log-modal');
         const logModalTitle = document.getElementById('log-modal-title');
         const logContent = document.getElementById('log-content');
@@ -174,7 +149,7 @@
                     body: JSON.stringify({ name, action })
                 });
                 showNotification(result.message, 'Sucesso');
-                loadBots();
+                await loadBots(); // Aguarda o carregamento para reiniciar o timer
             } catch (error) {
                 showNotification(`ERRO: ${error.message}`, 'Falha na Execução', 'error');
             }
@@ -189,7 +164,7 @@
                     method: 'DELETE'
                 });
                 showNotification(result.message, 'Sucesso');
-                loadBots();
+                await loadBots();
             } catch (error) {
                 showNotification(`ERRO: ${error.message}`, 'Falha ao Excluir', 'error');
             }
@@ -223,7 +198,7 @@
                     body: JSON.stringify({ scriptPath: scriptPath })
                 });
                 updateContent.textContent = result.output;
-                loadBots();
+                await loadBots();
             } catch (error) {
                 updateContent.textContent = `ERRO NO DEPLOY: ${error.message}`;
             }
@@ -263,9 +238,11 @@
             `;
         }
         
-        async function loadBots() {
+        async function loadBots(discoverNew = false) {
+            const apiUrl = discoverNew ? '/api/bots/status?discover=true' : '/api/bots/status';
+            
             try {
-                const bots = await fetchWithAuth('/api/bots/status');
+                const bots = await fetchWithAuth(apiUrl);
                 if (bots && bots.length > 0) {
                     botListContainer.innerHTML = bots.map(renderBot).join('');
                 } else {
@@ -280,22 +257,21 @@
             }
         }
 
-        function resetCountdown() {
-            clearInterval(refreshTimer);
+        function startCountdown() {
+            clearInterval(refreshTimer); // Garante que não haja timers duplicados
             countdown = REFRESH_INTERVAL;
-            let timer = setInterval(() => {
+            countdownElement.textContent = countdown.toString().padStart(2, '0');
+
+            refreshTimer = setInterval(async () => {
                 countdown--;
                 countdownElement.textContent = countdown.toString().padStart(2, '0');
                 if (countdown <= 0) {
-                    clearInterval(timer);
-                    loadBots();
+                    await loadBots(false); // Carrega os bots
+                    countdown = REFRESH_INTERVAL; // Reinicia o contador para o próximo ciclo
                 }
             }, 1000);
-            refreshTimer = timer;
         }
 
-        addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
-        
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.target.closest('.modal-overlay').style.display = 'none';
@@ -305,26 +281,6 @@
         window.addEventListener('click', (event) => {
             if (event.target.classList.contains('modal-overlay')) {
                 event.target.style.display = 'none';
-            }
-        });
-
-        addBotForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const name = document.getElementById('bot-name').value;
-            const scriptPath = document.getElementById('bot-script').value;
-            
-            try {
-                const result = await fetchWithAuth('/api/bots/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, scriptPath })
-                });
-                addBotModal.style.display = 'none';
-                addBotForm.reset();
-                showNotification(result.message, 'Sucesso');
-                loadBots();
-            } catch (error) {
-                showNotification(`ERRO: ${error.message}`, 'Falha ao Adicionar', 'error');
             }
         });
 
@@ -342,8 +298,8 @@
         
         document.addEventListener('DOMContentLoaded', async () => {
             feather.replace();
-            await loadBots();
-            resetCountdown();
+            await loadBots(true); // Faz a descoberta inicial
+            startCountdown(); // Inicia o ciclo de contagem e atualização
         });
     </script>
 </body>
