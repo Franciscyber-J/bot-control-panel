@@ -83,9 +83,11 @@ const sshConfig = {
     readyTimeout: 20000
 };
 
-const NODE_PATH = process.env.NODE_PATH || '/root/.nvm/versions/node/v18.20.8/bin/node';
-const PM2_PATH = process.env.PM2_PATH || '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-const NPM_PATH = process.env.NPM_PATH || '/root/.nvm/versions/node/v18.20.8/bin/npm';
+// #################### INÍCIO DA CORREÇÃO ####################
+// ARQUITETO: Adicionado um prefixo para carregar o ambiente NVM antes de cada comando.
+// Isso resolve o erro 'node: No such file or directory' em sessões SSH não-interativas.
+const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
+// ##################### FIM DA CORREÇÃO ######################
 
 // --- WebSocket Status Broadcasting ---
 const dashboardClients = new Set();
@@ -94,7 +96,7 @@ async function getBotsStatus() {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        const command = `${NODE_PATH} ${PM2_PATH} jlist`;
+        const command = `${NVM_PREFIX}pm2 jlist`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) {
             console.error('Falha ao obter a lista de bots:', result.stderr);
@@ -120,8 +122,7 @@ async function broadcastStatus() {
     });
 }
 
-// Broadcast status periodically
-setInterval(broadcastStatus, 5000); // Update every 5 seconds
+setInterval(broadcastStatus, 5000);
 
 // --- API Routes ---
 apiRouter.post('/bots/add', async (req, res) => {
@@ -131,7 +132,7 @@ apiRouter.post('/bots/add', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        const command = `${NODE_PATH} ${PM2_PATH} start ${scriptPath} --name ${name}`;
+        const command = `${NVM_PREFIX}pm2 start ${scriptPath} --name ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
         
@@ -151,7 +152,7 @@ apiRouter.post('/bots/manage', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        const command = `${NODE_PATH} ${PM2_PATH} ${action} ${name}`;
+        const command = `${NVM_PREFIX}pm2 ${action} ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
         
@@ -179,7 +180,7 @@ apiRouter.post('/bots/env/:name', async (req, res) => {
         const writeResult = await ssh.execCommand(writeCommand);
         if (writeResult.code !== 0) throw new Error(writeResult.stderr || 'Falha ao escrever o ficheiro .env no servidor.');
 
-        const reloadCommand = `${NODE_PATH} ${PM2_PATH} reload ${name}`;
+        const reloadCommand = `${NVM_PREFIX}pm2 reload ${name}`;
         const reloadResult = await ssh.execCommand(reloadCommand);
         if (reloadResult.code !== 0) throw new Error(reloadResult.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
         
@@ -197,7 +198,7 @@ apiRouter.delete('/bots/delete/:name', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        const command = `${NODE_PATH} ${PM2_PATH} delete ${name}`;
+        const command = `${NVM_PREFIX}pm2 delete ${name}`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
         
@@ -215,7 +216,7 @@ apiRouter.get('/bots/logs/:name', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
-        const command = `${NODE_PATH} ${PM2_PATH} logs ${name} --lines 100 --nostream`;
+        const command = `${NVM_PREFIX}pm2 logs ${name} --lines 100 --nostream`;
         const result = await ssh.execCommand(command);
         if (result.stderr && !result.stdout) throw new Error(result.stderr);
         res.json({ logs: result.stdout || 'Nenhum log disponível.' });
@@ -235,13 +236,16 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
+        // #################### INÍCIO DA CORREÇÃO ####################
+        // ARQUITETO: Comandos de deploy agora carregam o ambiente NVM antes de executar npm e pm2.
         const commands = [
             `git -C ${botDirectory} remote set-url origin ${gitUrl}`,
             `git -C ${botDirectory} fetch origin`,
             `git -C ${botDirectory} reset --hard origin/main`,
-            `${NPM_PATH} --prefix ${botDirectory} install`,
-            `${NODE_PATH} ${PM2_PATH} reload ${name}`
+            `${NVM_PREFIX}npm --prefix ${botDirectory} install`,
+            `${NVM_PREFIX}pm2 reload ${name}`
         ];
+        // ##################### FIM DA CORREÇÃO ######################
         let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
         for (const command of commands) {
             fullOutput += `> Executando: ${command}\n`;
@@ -261,10 +265,8 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
     }
 });
 
-
 app.use('/api', apiRouter);
 
-// --- WebSocket Server Upgrade ---
 server.on('upgrade', (request, socket, head) => {
     sessionParser(request, {}, () => {
         if (!request.session || !request.session.isAuthenticated) {
@@ -281,12 +283,10 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', (ws, request) => {
     const { pathname } = url.parse(request.url);
     
-    // Connection for Dashboard Status Updates
     if (pathname === '/ws/dashboard') {
         dashboardClients.add(ws);
         console.log('Cliente do dashboard conectado. Total:', dashboardClients.size);
 
-        // Send initial status immediately
         getBotsStatus().then(status => {
             ws.send(JSON.stringify({ type: 'statusUpdate', data: status }));
         });
@@ -298,7 +298,6 @@ wss.on('connection', (ws, request) => {
         return;
     }
 
-    // Connection for Individual Bot Logs
     const logMatch = pathname.match(/^\/ws\/logs\/(.+)$/);
     if (logMatch) {
         const botName = logMatch[1];
@@ -312,7 +311,7 @@ wss.on('connection', (ws, request) => {
 
         ssh.connect(sshConfig)
             .then(() => {
-                ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw --lines 20`, {
+                ssh.execCommand(`${NVM_PREFIX}pm2 logs ${botName} --raw --lines 20`, {
                     onStdout: (chunk) => {
                         if (ws.readyState === ws.OPEN) ws.send(chunk.toString('utf8'));
                     },
@@ -333,10 +332,8 @@ wss.on('connection', (ws, request) => {
         return;
     }
 
-    // No match, close connection
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
-
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
