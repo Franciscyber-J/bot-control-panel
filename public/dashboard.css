@@ -225,3 +225,9 @@ body::before {
     padding-top: 1.5rem; margin-top: 2rem;
     font-size: 0.9rem; color: var(--text-secondary);
 }
+/* Adicionar ao final do ficheiro dashboard.css */
+.action-btn-footer[onclick*="uploadEnvFile"]:hover {
+    color: var(--green);
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.2);
+}
