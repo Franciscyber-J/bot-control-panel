@@ -78,43 +78,35 @@ const PM2_PATH = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
 
 apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
-    const BOTS_DIRECTORY = '/root/bots';
-    const performDiscovery = req.query.discover === 'true';
-
     try {
         await ssh.connect(sshConfig);
-
-        if (performDiscovery) {
-            console.log('Executando rotina de descoberta de novos bots...');
-            const pm2ListResult = await ssh.execCommand(`${NODE_PATH} ${PM2_PATH} jlist`);
-            if (pm2ListResult.code !== 0) throw new Error(pm2ListResult.stderr || 'Falha ao executar pm2 jlist.');
-            const managedBots = JSON.parse(pm2ListResult.stdout);
-            const managedBotNames = managedBots.map(bot => bot.name);
-
-            const dirListResult = await ssh.execCommand(`ls ${BOTS_DIRECTORY}`);
-            if (dirListResult.code !== 0) throw new Error(`Não foi possível listar o diretório ${BOTS_DIRECTORY}.`);
-            const potentialBotNames = dirListResult.stdout.split('\n').filter(Boolean);
-
-            const newBotsToStart = potentialBotNames.filter(name => !managedBotNames.includes(name));
-
-            if (newBotsToStart.length > 0) {
-                console.log(`Novos bots encontrados: ${newBotsToStart.join(', ')}. A iniciar...`);
-                for (const botName of newBotsToStart) {
-                    const scriptPath = `${BOTS_DIRECTORY}/${botName}/index.js`;
-                    const startCommand = `${NODE_PATH} ${PM2_PATH} start ${scriptPath} --name ${botName}`;
-                    await ssh.execCommand(startCommand);
-                }
-            }
-        }
-
-        const finalListResult = await ssh.execCommand(`${NODE_PATH} ${PM2_PATH} jlist`);
-        if (finalListResult.code !== 0) throw new Error(finalListResult.stderr || 'Falha ao obter a lista final de bots.');
-        
-        res.json(JSON.parse(finalListResult.stdout));
-
+        const command = `${NODE_PATH} ${PM2_PATH} jlist`;
+        const result = await ssh.execCommand(command);
+        if (result.code !== 0) throw new Error(result.stderr || 'Falha ao obter a lista de bots.');
+        res.json(JSON.parse(result.stdout));
     } catch (error) {
         console.error("Erro na rota de status:", error.message);
         res.status(500).json({ error: `Falha na rota de status. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
+apiRouter.post('/bots/add', async (req, res) => {
+    const { name, scriptPath } = req.body;
+    if (!name || !scriptPath) {
+        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
+    }
+    const ssh = new NodeSSH();
+    try {
+        await ssh.connect(sshConfig);
+        const command = `${NODE_PATH} ${PM2_PATH} start ${scriptPath} --name ${name}`;
+        const result = await ssh.execCommand(command);
+        if (result.code !== 0) throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
+    } catch (error) {
+        console.error(`Erro ao adicionar o bot ${name}:`, error.message);
+        res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
     }
@@ -129,7 +121,7 @@ apiRouter.post('/bots/manage', async (req, res) => {
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} ${action} ${name}`;
-        const result = await ssh.execCommand(command, { cwd: '/root' });
+        const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
         res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.` });
     } catch (error) {
@@ -146,7 +138,7 @@ apiRouter.delete('/bots/delete/:name', async (req, res) => {
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} delete ${name}`;
-        const result = await ssh.execCommand(command, { cwd: '/root' });
+        const result = await ssh.execCommand(command);
         if (result.code !== 0) throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
         res.json({ message: `Bot '${name}' parado e excluído com sucesso.` });
     } catch (error) {
@@ -163,7 +155,7 @@ apiRouter.get('/bots/logs/:name', async (req, res) => {
     try {
         await ssh.connect(sshConfig);
         const command = `${NODE_PATH} ${PM2_PATH} logs ${name} --lines 100 --nostream`;
-        const result = await ssh.execCommand(command, { cwd: '/root' });
+        const result = await ssh.execCommand(command);
         if (result.stderr && !result.stdout) throw new Error(result.stderr);
         res.json({ logs: result.stdout || 'Nenhum log disponível.' });
     } catch (error) {
