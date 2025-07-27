@@ -101,7 +101,7 @@ body::before {
     backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 1.5rem;
+    padding: 1.5rem 1.8rem; /* Aumentado o padding horizontal */
     display: flex; flex-direction: column;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
