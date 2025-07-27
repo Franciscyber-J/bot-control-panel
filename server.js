@@ -2,23 +2,32 @@ require('dotenv').config();
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
 const path = require('path');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 const cookieSession = require('cookie-session');
+const cookieParser = require('cookie-parser');
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ noServer: true });
+
 const PORT = process.env.PORT || 10001;
 
 app.set('trust proxy', 1);
 
-app.use(cookieSession({
+const sessionParser = cookieSession({
     name: 'bcp-session',
     keys: [process.env.SESSION_SECRET],
     maxAge: 24 * 60 * 60 * 1000,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production'
-}));
+});
+
+app.use(sessionParser);
+app.use(cookieParser());
 
 const checkAuth = (req, res, next) => {
-    if (req.session.isAuthenticated) {
+    if (req.session && req.session.isAuthenticated) {
         return next();
     }
     if (req.originalUrl.startsWith('/api/')) {
@@ -31,7 +40,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-    if (req.session.isAuthenticated) {
+    if (req.session && req.session.isAuthenticated) {
         return res.redirect('/dashboard');
     }
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
@@ -75,7 +84,7 @@ const sshConfig = {
 
 const NODE_PATH = '/root/.nvm/versions/node/v18.20.8/bin/node';
 const PM2_PATH = '/root/.nvm/versions/node/v18.20.8/bin/pm2';
-const NPM_PATH = '/root/.nvm/versions/node/v18.20.8/bin/npm'; // Caminho para o NPM
+const NPM_PATH = '/root/.nvm/versions/node/v18.20.8/bin/npm';
 
 apiRouter.get('/bots/status', async (req, res) => {
     const ssh = new NodeSSH();
@@ -207,7 +216,7 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
             `git -C ${botDirectory} remote set-url origin ${gitUrl}`,
             `git -C ${botDirectory} fetch origin`,
             `git -C ${botDirectory} reset --hard origin/main`,
-            `${NODE_PATH} ${NPM_PATH} --prefix ${botDirectory} install`, // Comando NPM corrigido
+            `${NODE_PATH} ${NPM_PATH} --prefix ${botDirectory} install`,
             `${NODE_PATH} ${PM2_PATH} reload ${name}`
         ];
         let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
@@ -231,6 +240,59 @@ apiRouter.post('/bots/update/:name', async (req, res) => {
 
 app.use('/api', apiRouter);
 
-app.listen(PORT, () => {
+server.on('upgrade', (request, socket, head) => {
+    sessionParser(request, {}, () => {
+        if (!request.session || !request.session.isAuthenticated) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+            socket.destroy();
+            return;
+        }
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    });
+});
+
+wss.on('connection', (ws, request) => {
+    const botName = request.url.split('/').pop();
+    if (!botName) {
+        ws.close(1008, 'Nome do bot não fornecido.');
+        return;
+    }
+
+    console.log(`Cliente WebSocket conectado para os logs de: ${botName}`);
+    const ssh = new NodeSSH();
+    
+    ssh.connect(sshConfig)
+        .then(() => {
+            ssh.execCommand(`${NODE_PATH} ${PM2_PATH} logs ${botName} --raw`, {
+                onStdout: (chunk) => {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(chunk.toString('utf8'));
+                    }
+                },
+                onStderr: (chunk) => {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            console.error(`Erro na conexão SSH ou comando para logs de ${botName}:`, err);
+            if (ws.readyState === ws.OPEN) {
+                ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
+            }
+        });
+
+    ws.on('close', () => {
+        console.log(`Cliente WebSocket desconectado para os logs de: ${botName}`);
+        if (ssh.connection) {
+            ssh.dispose();
+        }
+    });
+});
+
+server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
 });

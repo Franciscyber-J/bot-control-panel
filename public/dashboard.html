@@ -114,50 +114,24 @@
     <input type="file" id="env-file-input" style="display: none;" accept=".env">
 
     <script>
-        const botListContainer = document.getElementById('bot-list');
-        const countdownElement = document.getElementById('countdown');
-        const lastUpdatedElement = document.getElementById('last-updated');
-        const envFileInput = document.getElementById('env-file-input');
-        
-        const addBotBtn = document.getElementById('add-bot-btn');
-        const addBotModal = document.getElementById('add-bot-modal');
-        const addBotForm = document.getElementById('add-bot-form');
+        let currentLogSocket = null;
 
-        const updateSourceModal = document.getElementById('update-source-modal');
-        const updateSourceForm = document.getElementById('update-source-form');
-        const botGitUrlInput = document.getElementById('bot-git-url');
-
-        const logModal = document.getElementById('log-modal');
-        const logModalTitle = document.getElementById('log-modal-title');
-        const logContent = document.getElementById('log-content');
-
-        const updateModal = document.getElementById('update-modal');
-        const updateModalTitle = document.getElementById('update-modal-title');
-        const updateContent = document.getElementById('update-content');
-
-        const notificationModal = document.getElementById('notification-modal');
-        const notificationTitle = document.getElementById('notification-title');
-        const notificationMessage = document.getElementById('notification-message');
-
-        const confirmationModal = document.getElementById('confirmation-modal');
-        const confirmationTitle = document.getElementById('confirmation-title');
-        const confirmationMessage = document.getElementById('confirmation-message');
-        const confirmBtnYes = document.getElementById('confirm-btn-yes');
-        const confirmBtnNo = document.getElementById('confirm-btn-no');
-        const logoutBtn = document.getElementById('logout-btn');
-
-        const REFRESH_INTERVAL = 30;
-        let countdown = REFRESH_INTERVAL;
-        let refreshTimer;
-
-        function showNotification(message, title = 'Aviso', type = 'info') {
+        function showNotification(title, message, type = 'info') {
+            const notificationTitle = document.getElementById('notification-title');
+            const notificationMessage = document.getElementById('notification-message');
+            const notificationModal = document.getElementById('notification-modal');
             notificationTitle.textContent = title;
             notificationMessage.textContent = message;
             notificationModal.dataset.type = type;
             notificationModal.style.display = 'flex';
         }
 
-        function showConfirmation(message, title = 'Confirmar Ação') {
+        function showConfirmation(title, message) {
+            const confirmationTitle = document.getElementById('confirmation-title');
+            const confirmationMessage = document.getElementById('confirmation-message');
+            const confirmationModal = document.getElementById('confirmation-modal');
+            const confirmBtnYes = document.getElementById('confirm-btn-yes');
+            const confirmBtnNo = document.getElementById('confirm-btn-no');
             confirmationTitle.textContent = title;
             confirmationMessage.textContent = message;
             confirmationModal.style.display = 'flex';
@@ -185,7 +159,7 @@
 
         async function manageBot(name, action) {
             const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
-            const confirmed = await showConfirmation(`Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
+            const confirmed = await showConfirmation(`Confirmar Ação`, `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
             if (!confirmed) return;
             try {
                 const result = await fetchWithAuth('/api/bots/manage', {
@@ -193,40 +167,72 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, action })
                 });
-                showNotification(result.message, 'Sucesso');
+                showNotification('Sucesso', result.message);
                 await loadBots();
             } catch (error) {
-                showNotification(`ERRO: ${error.message}`, 'Falha na Execução', 'error');
+                showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
             }
         }
 
         async function deleteBot(name) {
-            const confirmed = await showConfirmation(`Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`, 'Confirmar Exclusão');
+            const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`);
             if (!confirmed) return;
             try {
                 const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
-                showNotification(result.message, 'Sucesso');
+                showNotification('Sucesso', result.message);
                 await loadBots();
             } catch (error) {
-                showNotification(`ERRO: ${error.message}`, 'Falha ao Excluir', 'error');
+                showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error');
             }
         }
-
+        
         async function showLogs(name) {
+            const logModal = document.getElementById('log-modal');
+            const logModalTitle = document.getElementById('log-modal-title');
+            const logContent = document.getElementById('log-content');
+            const logContainer = logContent.parentElement;
+            
             logModal.style.display = 'flex';
-            logModalTitle.textContent = `Logs do Bot: ${name}`;
-            logContent.textContent = 'A carregar logs...';
+            logModalTitle.textContent = `Logs de ${name} (a conectar...)`;
+            logContent.textContent = 'A carregar histórico de logs...';
+
             try {
                 const result = await fetchWithAuth(`/api/bots/logs/${name}`);
-                logContent.textContent = result.logs;
+                logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
+                logContainer.scrollTop = logContainer.scrollHeight;
             } catch (error) {
-                logContent.textContent = `ERRO AO CARREGAR LOGS: ${error.message}`;
+                logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`;
+                return;
             }
+
+            if (currentLogSocket) currentLogSocket.close();
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/${name}`;
+            currentLogSocket = new WebSocket(wsUrl);
+
+            currentLogSocket.onopen = () => {
+                logModalTitle.textContent = `Logs de ${name} (Conectado)`;
+            };
+            currentLogSocket.onmessage = (event) => {
+                logContent.textContent += event.data;
+                logContainer.scrollTop = logContainer.scrollHeight;
+            };
+            currentLogSocket.onerror = (error) => {
+                logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n';
+                console.error('Erro no WebSocket:', error);
+            };
+            currentLogSocket.onclose = () => {
+                logModalTitle.textContent = `Logs de ${name} (Desconectado)`;
+            };
         }
 
         function showUpdateModal(name, scriptPath) {
+            const updateSourceModal = document.getElementById('update-source-modal');
+            const updateSourceForm = document.getElementById('update-source-form');
+            const botGitUrlInput = document.getElementById('bot-git-url');
             updateSourceModal.style.display = 'flex';
-            botGitUrlInput.value = ''; // Limpa o campo
+            botGitUrlInput.value = '';
             updateSourceForm.onsubmit = (event) => {
                 event.preventDefault();
                 const gitUrl = botGitUrlInput.value;
@@ -236,6 +242,9 @@
         }
 
         async function updateBot(name, scriptPath, gitUrl) {
+            const updateModal = document.getElementById('update-modal');
+            const updateModalTitle = document.getElementById('update-modal-title');
+            const updateContent = document.getElementById('update-content');
             updateModal.style.display = 'flex';
             updateModalTitle.textContent = `Deploy do Bot: ${name}`;
             updateContent.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
@@ -253,10 +262,11 @@
         }
 
         async function uploadEnvFile(name, scriptPath) {
+            const envFileInput = document.getElementById('env-file-input');
             envFileInput.onchange = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-                const confirmed = await showConfirmation(`Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
+                const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
                 if (!confirmed) {
                     envFileInput.value = '';
                     return;
@@ -270,10 +280,10 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ content, scriptPath })
                         });
-                        showNotification(result.message, 'Sucesso');
+                        showNotification('Sucesso', result.message);
                         await loadBots();
                     } catch (error) {
-                        showNotification(`ERRO: ${error.message}`, 'Falha no Upload', 'error');
+                        showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error');
                     } finally {
                         envFileInput.value = '';
                     }
@@ -282,7 +292,7 @@
             };
             envFileInput.click();
         }
-
+        
         function renderBot(bot) {
             const isOnline = bot.pm2_env.status === 'online';
             const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -316,6 +326,8 @@
         }
         
         async function loadBots() {
+            const botListContainer = document.getElementById('bot-list');
+            const lastUpdatedElement = document.getElementById('last-updated');
             try {
                 const bots = await fetchWithAuth('/api/bots/status');
                 botListContainer.innerHTML = bots.length > 0 ? bots.map(renderBot).join('') : '<div class="bot-card"><p class="info-message">[RESPOSTA VAZIA] :: Nenhum processo encontrado.</p></div>';
@@ -329,6 +341,7 @@
         }
 
         function startCountdown() {
+            const countdownElement = document.getElementById('countdown');
             clearInterval(refreshTimer);
             countdown = REFRESH_INTERVAL;
             countdownElement.textContent = countdown.toString().padStart(2, '0');
@@ -352,12 +365,21 @@
 
             document.querySelectorAll('.close-modal-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    e.target.closest('.modal-overlay').style.display = 'none';
+                    const modal = e.target.closest('.modal-overlay');
+                    if (modal.id === 'log-modal' && currentLogSocket) {
+                        currentLogSocket.close();
+                        currentLogSocket = null;
+                    }
+                    modal.style.display = 'none';
                 });
             });
             
             window.addEventListener('click', (event) => {
                 if (event.target.classList.contains('modal-overlay')) {
+                    if (event.target.id === 'log-modal' && currentLogSocket) {
+                        currentLogSocket.close();
+                        currentLogSocket = null;
+                    }
                     event.target.style.display = 'none';
                 }
             });
@@ -374,21 +396,21 @@
                     });
                     addBotModal.style.display = 'none';
                     addBotForm.reset();
-                    showNotification(result.message, 'Sucesso');
+                    showNotification('Sucesso', result.message);
                     await loadBots();
                 } catch (error) {
-                    showNotification(`ERRO: ${error.message}`, 'Falha ao Adicionar', 'error');
+                    showNotification('Falha ao Adicionar', `ERRO: ${error.message}`, 'error');
                 }
             });
 
             logoutBtn.addEventListener('click', async () => {
-                const confirmed = await showConfirmation('Deseja realmente encerrar a sessão?');
+                const confirmed = await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?');
                 if(confirmed) {
                     try {
                         await fetch('/api/logout', { method: 'POST' });
                         window.location.href = '/';
                     } catch (error) {
-                        showNotification('Falha ao fazer logout.', 'Erro', 'error');
+                        showNotification('Erro', 'Falha ao fazer logout.', 'error');
                     }
                 }
             });
