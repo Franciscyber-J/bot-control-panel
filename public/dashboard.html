@@ -7,16 +7,17 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%2300FFFF' d='M20 10 H80 V20 H30 V80 H20 V10 Z M40 30 H90 V40 H50 V90 H40 V30 Z' /%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header class="panel-header">
             <h1>Painel de Controlo de Bots</h1>
             <div class="header-controls">
-                <button id="add-bot-btn" class="action-btn">Adicionar Novo Bot</button>
-                <button id="logout-btn" class="action-btn btn-stop">Logout</button>
+                <button id="add-bot-btn" class="action-btn primary">Adicionar Novo Bot</button>
+                <button id="logout-btn" class="action-btn">Logout</button>
             </div>
         </header>
 
@@ -41,8 +42,8 @@
                     <input type="text" id="bot-script" required>
                 </div>
                 <div class="modal-actions">
-                    <button type="submit" class="action-btn">Adicionar e Iniciar</button>
-                    <button type="button" class="action-btn btn-stop close-modal-btn">Cancelar</button>
+                    <button type="submit" class="action-btn primary">Adicionar e Iniciar</button>
+                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -87,8 +88,8 @@
             <h2 id="confirmation-title">Confirmar Ação</h2>
             <p id="confirmation-message"></p>
             <div class="modal-actions">
-                <button type="button" id="confirm-btn-yes" class="action-btn">Confirmar</button>
-                <button type="button" id="confirm-btn-no" class="action-btn btn-stop">Cancelar</button>
+                <button type="button" id="confirm-btn-yes" class="action-btn primary">Confirmar</button>
+                <button type="button" id="confirm-btn-no" class="action-btn danger">Cancelar</button>
             </div>
         </div>
     </div>
@@ -119,7 +120,6 @@
         const confirmationMessage = document.getElementById('confirmation-message');
         const confirmBtnYes = document.getElementById('confirm-btn-yes');
         const confirmBtnNo = document.getElementById('confirm-btn-no');
-
         const logoutBtn = document.getElementById('logout-btn');
 
         const REFRESH_INTERVAL = 30;
@@ -176,7 +176,7 @@
                 showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                showNotification(`// ERRO DE EXECUÇÃO\n> ${error.message}`, 'Erro', 'error');
+                showNotification(`ERRO: ${error.message}`, 'Falha na Execução', 'error');
             }
         }
 
@@ -191,7 +191,7 @@
                 showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                showNotification(`// ERRO AO EXCLUIR\n> ${error.message}`, 'Erro', 'error');
+                showNotification(`ERRO: ${error.message}`, 'Falha ao Excluir', 'error');
             }
         }
 
@@ -204,7 +204,7 @@
                 const result = await fetchWithAuth(`/api/bots/logs/${name}`);
                 logContent.textContent = result.logs;
             } catch (error) {
-                logContent.textContent = `// ERRO AO CARREGAR LOGS\n> ${error.message}`;
+                logContent.textContent = `ERRO AO CARREGAR LOGS: ${error.message}`;
             }
         }
 
@@ -225,7 +225,7 @@
                 updateContent.textContent = result.output;
                 loadBots();
             } catch (error) {
-                updateContent.textContent = `// ERRO NO DEPLOY\n> ${error.message}`;
+                updateContent.textContent = `ERRO NO DEPLOY: ${error.message}`;
             }
         }
 
@@ -234,50 +234,49 @@
             const statusClass = isOnline ? 'status-online' : 'status-offline';
             const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
             const statusText = bot.pm2_env.status === 'online' ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
-            const glowColor = isOnline ? 'var(--cyan-rgba)' : 'var(--red-rgba)';
             const scriptPath = bot.pm2_env.pm_exec_path;
 
             return `
-                <div class="bot-card" style="--glow-color: ${glowColor};">
+                <div class="bot-card">
                     <div class="card-header">
-                        <h2>> ${bot.name}</h2>
+                        <h2>${bot.name}</h2>
                         <div class="status-indicator ${statusClass}">
                             <span>${statusText}</span>
                         </div>
                     </div>
                     <div class="card-body">
-                        <p class="data-field"><span class="label">CARGA DE CPU</span>: ${bot.monit.cpu}%</p>
-                        <p class="data-field"><span class="label">USO DE MEMÓRIA</span>: ${memory} MB</p>
-                        <p class="data-field"><span class="label">REINICIALIZAÇÕES</span>: ${bot.pm2_env.restart_time}</p>
+                        <p class="data-field"><span class="label">CARGA DE CPU</span> <span>${bot.monit.cpu}%</span></p>
+                        <p class="data-field"><span class="label">USO DE MEMÓRIA</span> <span>${memory} MB</span></p>
+                        <p class="data-field"><span class="label">REINICIALIZAÇÕES</span> <span>${bot.pm2_env.restart_time}</span></p>
                     </div>
                     <div class="card-actions">
-                        <button class="action-btn" onclick="manageBot('${bot.name}', 'start')">INICIAR</button>
-                        <button class="action-btn" onclick="manageBot('${bot.name}', 'restart')">REINICIAR</button>
-                        <button class="action-btn btn-stop" onclick="manageBot('${bot.name}', 'stop')">PARAR</button>
+                        <button class="action-btn-card" onclick="manageBot('${bot.name}', 'start')">Iniciar</button>
+                        <button class="action-btn-card" onclick="manageBot('${bot.name}', 'restart')">Reiniciar</button>
+                        <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')">Parar</button>
                     </div>
                     <div class="card-footer-actions">
-                        <button class="action-btn-secondary" onclick="showLogs('${bot.name}')">Ver Logs</button>
-                        <button class="action-btn-update" onclick="updateBot('${bot.name}', '${scriptPath}')">Atualizar</button>
-                        <button class="action-btn-delete" onclick="deleteBot('${bot.name}')">Excluir</button>
+                        <button class="action-btn-footer" onclick="showLogs('${bot.name}')"><i data-feather="terminal"></i>Logs</button>
+                        <button class="action-btn-footer" onclick="updateBot('${bot.name}', '${scriptPath}')"><i data-feather="git-pull-request"></i>Atualizar</button>
+                        <button class="action-btn-footer danger" onclick="deleteBot('${bot.name}')"><i data-feather="trash-2"></i> Excluir</button>
                     </div>
                 </div>
             `;
         }
         
         async function loadBots() {
-            botListContainer.innerHTML = '<p class="loading-message">Consultando o servidor PM2...</p>';
             try {
                 const bots = await fetchWithAuth('/api/bots/status');
                 if (bots && bots.length > 0) {
                     botListContainer.innerHTML = bots.map(renderBot).join('');
                 } else {
-                    botListContainer.innerHTML = '<p class="info-message">[RESPOSTA VAZIA] :: Nenhum processo encontrado.</p>';
+                    botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[RESPOSTA VAZIA] :: Nenhum processo encontrado.</p></div>';
                 }
                 lastUpdatedElement.textContent = new Date().toLocaleTimeString('pt-BR');
             } catch (error) {
-                // A verificação 401 já redireciona em fetchWithAuth
                 if(error.message.includes('401')) return;
-                botListContainer.innerHTML = `<p class="error-message">[ERRO DE CONEXÃO] :: ${error.message}</p>`;
+                botListContainer.innerHTML = `<div class="bot-card"><p class="error-message">[ERRO DE CONEXÃO] :: ${error.message}</p></div>`;
+            } finally {
+                feather.replace();
             }
             resetCountdown();
         }
@@ -285,14 +284,15 @@
         function resetCountdown() {
             clearInterval(refreshTimer);
             countdown = REFRESH_INTERVAL;
-            countdownElement.textContent = countdown.toString().padStart(2, '0');
-            refreshTimer = setInterval(() => {
+            let timer = setInterval(() => {
                 countdown--;
                 countdownElement.textContent = countdown.toString().padStart(2, '0');
                 if (countdown <= 0) {
+                    clearInterval(timer);
                     loadBots();
                 }
             }, 1000);
+            refreshTimer = timer;
         }
         
         addBotBtn.addEventListener('click', () => { addBotModal.style.display = 'flex'; });
@@ -325,7 +325,7 @@
                 showNotification(result.message, 'Sucesso');
                 loadBots();
             } catch (error) {
-                showNotification(`// ERRO AO ADICIONAR\n> ${error.message}`, 'Erro', 'error');
+                showNotification(`ERRO: ${error.message}`, 'Falha ao Adicionar', 'error');
             }
         });
 
@@ -340,8 +340,11 @@
                 }
             }
         });
-
-        loadBots();
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            feather.replace();
+            loadBots();
+        });
     </script>
 </body>
 </html>
