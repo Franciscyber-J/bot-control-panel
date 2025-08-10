@@ -424,6 +424,13 @@
     }
 
     async function testNotification(notification) {
+        // ### INÍCIO DA CORREÇÃO ###
+        // Adiciona uma verificação para garantir que o objeto de notificação é válido
+        if (!notification || !notification.token || !notification.chatId) {
+            showNotification('Falha no Teste', 'ERRO: Os dados da notificação (token ou chat ID) não foram encontrados no cliente. Por favor, feche e abra o gestor de notificações e tente novamente.', 'error');
+            return;
+        }
+        // ### FIM DA CORREÇÃO ###
         try {
             const result = await fetchWithAuth('/api/bots/notifications/test', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: notification.token, chatId: notification.chatId, message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${notification.name}".` })
