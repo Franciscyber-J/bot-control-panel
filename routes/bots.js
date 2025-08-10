@@ -311,4 +311,44 @@ router.post('/bots/inject-notifier/:name', async (req, res) => {
     }
 });
 
+
+// #################### NOVA ROTA PARA LIMPAR SESSÃO ####################
+
+router.post('/bots/reset-session/:name', async (req, res) => {
+    const { name } = req.params;
+    const { scriptPath } = req.body;
+    if (!name || !scriptPath) {
+        return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
+    }
+
+    const botDirectory = path.dirname(scriptPath);
+    const ssh = new NodeSSH();
+
+    try {
+        await ssh.connect(sshConfig);
+        
+        // 1. Para o bot para libertar os ficheiros de sessão
+        await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
+
+        // 2. Apaga as pastas de sessão mais comuns de forma segura
+        // O comando '|| true' garante que, se uma pasta não existir, o script não falhe.
+        await ssh.execCommand(`rm -rf ${path.join(botDirectory, '.wwebjs_auth')} || true`);
+        await ssh.execCommand(`rm -rf ${path.join(botDirectory, 'session')} || true`);
+        await ssh.execCommand(`rm -f ${path.join(botDirectory, 'session.json')} || true`);
+
+        // 3. Reinicia o bot. O pm2 irá iniciá-lo novamente.
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`);
+        
+        res.json({ message: `Sessão do bot '${name}' limpa com sucesso. O bot foi reiniciado e irá gerar um novo QR Code.` });
+        
+    } catch (error) {
+        // Tenta reiniciar o bot mesmo em caso de erro para não o deixar parado
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(() => {});
+        res.status(500).json({ error: `Falha ao limpar a sessão. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
+
 module.exports = router;

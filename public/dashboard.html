@@ -323,6 +323,28 @@
         };
         fileInput.click();
     }
+
+    // --- Lógica de Sessão do WhatsApp ---
+    async function resetBotSession(botName, scriptPath) {
+        const confirmed = await showConfirmation(
+            'Adicionar Novo Número', 
+            `Tem a certeza que deseja desconectar o aparelho atual do bot <b>${botName}</b>?\n\nEsta ação irá apagar os dados da sessão guardada, forçar a geração de um novo QR Code e reiniciar o bot.`
+        );
+        if (!confirmed) return;
+
+        try {
+            const result = await fetchWithAuth(`/api/bots/reset-session/${botName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scriptPath })
+            });
+            showNotification('Sucesso', result.message);
+            // Abre os logs automaticamente para o utilizador ver o novo QR Code
+            setTimeout(() => showLogs(botName), 500);
+        } catch (error) {
+            showNotification('Falha ao Limpar Sessão', `ERRO: ${error.message}`, 'error');
+        }
+    }
     
     // --- Lógica de Gestão de Notificações ---
     async function showNotificationManager(botName, scriptPath) {
@@ -452,10 +474,11 @@
                     <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')" ${!isOnline ? 'disabled' : ''}>Parar</button>
                 </div>
                 <div class="card-footer-actions">
-                    <button class="action-btn-footer" onclick="showNotificationManager('${bot.name}', '${scriptPath}')"><i data-feather="bell"></i>Notificações</button>
-                    <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')"><i data-feather="upload-cloud"></i>Enviar .env</button>
-                    <button class="action-btn-footer" onclick="showLogs('${bot.name}')"><i data-feather="terminal"></i>Logs</button>
-                    <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')"><i data-feather="git-pull-request"></i>Atualizar</button>
+                    <button class="action-btn-footer" onclick="resetBotSession('${bot.name}', '${scriptPath}')" title="Adicionar novo número de WhatsApp"><i data-feather="zap"></i>Add Nº Novo</button>
+                    <button class="action-btn-footer" onclick="showNotificationManager('${bot.name}', '${scriptPath}')" title="Gerir Notificações do Telegram"><i data-feather="bell"></i>Notificações</button>
+                    <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')" title="Enviar Ficheiro .env"><i data-feather="upload-cloud"></i>Enviar .env</button>
+                    <button class="action-btn-footer" onclick="showLogs('${bot.name}')" title="Ver Logs"><i data-feather="terminal"></i>Logs</button>
+                    <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')" title="Atualizar a partir do Git"><i data-feather="git-pull-request"></i>Atualizar</button>
                 </div>
             </div>
         `;
