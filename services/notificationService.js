@@ -1,66 +1,126 @@
-// ARQUIVO: services/notificationService.js (NOVO)
+// ARQUIVO: services/notificationService.js (COMPLETO E CORRIGIDO)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 
 /**
  * Parsea o conteúdo de um ficheiro .env para encontrar as configurações de notificação.
- * Retorna um array de objetos de notificação.
+ * Esta versão é inteligente e suporta múltiplos formatos legados.
  */
 function parseNotifications(envContent) {
     const notifications = {};
     const lines = envContent.split('\n');
+    let hasNewFormat = false;
 
+    // Prioridade 1: Tenta parsear o novo formato numerado primeiro.
     lines.forEach(line => {
         const matchName = line.match(/^TELEGRAM_NAME_(\d+)="?([^"]+)"?$/);
-        const matchToken = line.match(/^TELEGRAM_TOKEN_(\d+)="?([^"]+)"?$/);
-        const matchChatId = line.match(/^TELEGRAM_CHAT_ID_(\d+)="?([^"]+)"?$/);
-
         if (matchName) {
+            hasNewFormat = true;
             const id = matchName[1];
             if (!notifications[id]) notifications[id] = { id };
             notifications[id].name = matchName[2];
-        } else if (matchToken) {
+        }
+        const matchToken = line.match(/^TELEGRAM_TOKEN_(\d+)="?([^"]+)"?$/);
+        if (matchToken) {
+            hasNewFormat = true;
             const id = matchToken[1];
             if (!notifications[id]) notifications[id] = { id };
             notifications[id].token = matchToken[2];
-        } else if (matchChatId) {
+        }
+        const matchChatId = line.match(/^TELEGRAM_CHAT_ID_(\d+)="?([^"]+)"?$/);
+        if (matchChatId) {
+            hasNewFormat = true;
             const id = matchChatId[1];
             if (!notifications[id]) notifications[id] = { id };
             notifications[id].chatId = matchChatId[2];
         }
     });
 
-    return Object.values(notifications).filter(n => n.name && n.token && n.chatId);
+    // Se o novo formato não foi encontrado, procura pelos formatos legados.
+    if (!hasNewFormat) {
+        // Formato Legado 1: ..._PRINCIPAL / ..._SECUNDARIO
+        const principalTokenLine = lines.find(l => l.startsWith('TELEGRAM_BOT_TOKEN_PRINCIPAL='));
+        const principalChatIdLine = lines.find(l => l.startsWith('TELEGRAM_CHAT_ID_PRINCIPAL='));
+        if (principalTokenLine && principalChatIdLine) {
+            notifications[1] = {
+                id: 1, name: 'Principal',
+                token: principalTokenLine.split('=')[1].replace(/"/g, ''),
+                chatId: principalChatIdLine.split('=')[1].replace(/"/g, '')
+            };
+        }
+        const secundarioTokenLine = lines.find(l => l.startsWith('TELEGRAM_BOT_TOKEN_SECUNDARIO='));
+        const secundarioChatIdLine = lines.find(l => l.startsWith('TELEGRAM_CHAT_ID_SECUNDARIO='));
+        if (secundarioTokenLine && secundarioChatIdLine) {
+            notifications[2] = {
+                id: 2, name: 'Secundario',
+                token: secundarioTokenLine.split('=')[1].replace(/"/g, ''),
+                chatId: secundarioChatIdLine.split('=')[1].replace(/"/g, '')
+            };
+        }
+
+        // Formato Legado 2: TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (sem sufixo)
+        const singleTokenLine = lines.find(l => l.startsWith('TELEGRAM_BOT_TOKEN='));
+        const singleChatIdLine = lines.find(l => l.startsWith('TELEGRAM_CHAT_ID='));
+        if (singleTokenLine && singleChatIdLine) {
+            notifications[1] = { // Assume ID 1 para o formato simples
+                id: 1, name: 'Padrão', // Nome genérico
+                token: singleTokenLine.split('=')[1].replace(/"/g, ''),
+                chatId: singleChatIdLine.split('=')[1].replace(/"/g, '')
+            };
+        }
+    }
+
+    return Object.values(notifications).filter(n => n.id && n.name && n.token && n.chatId);
 }
 
 
 /**
- * Atualiza ou adiciona uma nova notificação no conteúdo do ficheiro .env.
- * @param {string} envContent - O conteúdo atual do ficheiro .env.
- * @param {object} notification - O objeto de notificação { id, name, token, chatId }.
- * @returns {string} - O novo conteúdo do ficheiro .env.
+ * Atualiza ou adiciona uma notificação. Esta função sempre escreve no NOVO FORMATO,
+ * migrando automaticamente o .env se ele estava em um formato legado.
  */
-function updateEnvFile(envContent, notification) {
-    let lines = envContent.split('\n');
-    const { id, name, token, chatId } = notification;
-
-    // Remove as linhas antigas para este ID, se existirem
-    lines = lines.filter(line => !line.startsWith(`TELEGRAM_NAME_${id}=`) &&
-                                 !line.startsWith(`TELEGRAM_TOKEN_${id}=`) &&
-                                 !line.startsWith(`TELEGRAM_CHAT_ID_${id}=`));
-
-    // Adiciona as novas linhas
-    lines.push(`TELEGRAM_NAME_${id}="${name}"`);
-    lines.push(`TELEGRAM_TOKEN_${id}="${token}"`);
-    lines.push(`TELEGRAM_CHAT_ID_${id}="${chatId}"`);
-
-    // Limpa linhas em branco do final
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
-        lines.pop();
+function updateEnvFile(currentEnvContent, updatedNotification) {
+    const existingNotifications = parseNotifications(currentEnvContent);
+    const notificationIndex = existingNotifications.findIndex(n => n.id == updatedNotification.id);
+    if (notificationIndex > -1) {
+        existingNotifications[notificationIndex] = updatedNotification;
+    } else {
+        existingNotifications.push(updatedNotification);
     }
     
-    return lines.join('\n') + '\n';
+    // Filtra as linhas do .env, removendo TODAS as variáveis de notificação (legadas e novas)
+    let otherLines = currentEnvContent.split('\n').filter(line => 
+        !line.startsWith('TELEGRAM_BOT_TOKEN_PRINCIPAL=') &&
+        !line.startsWith('TELEGRAM_CHAT_ID_PRINCIPAL=') &&
+        !line.startsWith('TELEGRAM_BOT_TOKEN_SECUNDARIO=') &&
+        !line.startsWith('TELEGRAM_CHAT_ID_SECUNDARIO=') &&
+        !line.startsWith('TELEGRAM_BOT_TOKEN=') &&
+        !line.startsWith('TELEGRAM_CHAT_ID=') &&
+        !line.startsWith('TELEGRAM_NAME_') &&
+        !line.startsWith('TELEGRAM_TOKEN_') &&
+        !line.startsWith('TELEGRAM_CHAT_ID_')
+    );
+
+    // Limpa linhas em branco e comentários vazios
+    otherLines = otherLines.filter(line => line.trim() !== '' && !line.trim().startsWith('#') || line.includes('='));
+    
+    let newEnvContent = otherLines.join('\n');
+    if (newEnvContent.length > 0) {
+        newEnvContent += '\n\n';
+    }
+    
+    newEnvContent += `# ==========================================================\n`;
+    newEnvContent += `# ARQUITETO: Chaves de API do Telegram para notificações\n`;
+    newEnvContent += `# (Gerado e gerido automaticamente pelo Painel de Controlo)\n`;
+    newEnvContent += `# ==========================================================\n\n`;
+
+    existingNotifications.forEach(notif => {
+        newEnvContent +=`TELEGRAM_NAME_${notif.id}="${notif.name}"\n`;
+        newEnvContent +=`TELEGRAM_TOKEN_${notif.id}="${notif.token}"\n`;
+        newEnvContent +=`TELEGRAM_CHAT_ID_${notif.id}="${notif.chatId}"\n\n`;
+    });
+
+    return newEnvContent.trim() + '\n';
 }
 
 /**
@@ -119,7 +179,6 @@ module.exports = { sendNotification };
 `;
 }
 
-
 /**
  * Garante que o ficheiro do notificador e a sua injeção no bot principal existem.
  */
@@ -128,17 +187,14 @@ async function injectNotifier(ssh, scriptPath) {
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
-    // 1. Verifica se o notifier.js existe. Se não, cria.
     const checkNotifierFile = await ssh.execCommand(`test -f ${notifierPath} && echo "exists"`);
     if (checkNotifierFile.code !== 0) {
         const notifierContent = getNotifierContent();
         const base64Content = Buffer.from(notifierContent).toString('base64');
         await ssh.execCommand(`echo ${base64Content} | base64 --decode > ${notifierPath}`);
-        // Também instala a dependência do telegram no diretório do bot
-        await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api`);
+        await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api dotenv`);
     }
 
-    // 2. Verifica se o script principal já importa o notificador. Se não, injeta.
     const mainScriptContentResult = await ssh.execCommand(`cat ${mainScriptPath}`);
     const mainScriptContent = mainScriptContentResult.stdout;
     const injectionLine = `const { sendNotification } = require('./telegramNotifier.js');`;
@@ -150,7 +206,6 @@ async function injectNotifier(ssh, scriptPath) {
     }
 }
 
-
 /**
  * Envia uma mensagem de teste diretamente.
  */
@@ -159,17 +214,9 @@ async function sendTestMessage(token, chatId, message) {
         const bot = new TelegramBot(token);
         await bot.sendMessage(chatId, message);
     } catch (error) {
-        // Tenta extrair uma mensagem de erro mais útil da API do Telegram
         const errorMessage = error.response ? error.response.body.description : error.message;
         throw new Error(errorMessage || 'Erro desconhecido.');
     }
 }
 
-
-module.exports = {
-    parseNotifications,
-    updateEnvFile,
-    getNotifierContent,
-    injectNotifier,
-    sendTestMessage
-};
+module.exports = { parseNotifications, updateEnvFile, getNotifierContent, injectNotifier, sendTestMessage };
