@@ -239,7 +239,7 @@ wss.on('connection', (ws, request) => {
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
-// ########## FUNÇÃO CORRIGIDA ##########
+// ########## FUNÇÃO CORRIGIDA E ROBUSTA ##########
 async function handleResetSession(ws, data) {
     const { name, scriptPath } = data;
     const sendProgress = (message) => {
@@ -251,7 +251,6 @@ async function handleResetSession(ws, data) {
     const ssh = new NodeSSH();
     const botDirectory = path.dirname(scriptPath);
 
-    // Função auxiliar para esperar por uma condição com timeouts
     const waitForCondition = async (condition, timeout = 30000, interval = 2000) => {
         const startTime = Date.now();
         while (Date.now() - startTime < timeout) {
@@ -269,29 +268,48 @@ async function handleResetSession(ws, data) {
         sendProgress(`Iniciando limpeza de sessão para '${name}'...`);
         sendProgress(`Aguarde, isto pode demorar um pouco.`);
 
-        // 1. Parar o bot
-        sendProgress(`A parar o bot...`);
+        sendProgress(`A enviar comando para parar o bot (se estiver a correr)...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
 
-        // 2. Monitorizar até que o bot esteja realmente parado
         sendProgress(`A verificar se o bot está parado...`);
         const isStopped = await waitForCondition(async () => {
             const result = await ssh.execCommand(`${NVM_PREFIX}pm2 describe ${name}`);
-            // Um bot parado pode ter o status "stopped", "stopping" ou "errored". Todos são aceitáveis para prosseguir.
-            return result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"') || result.stdout.includes('"status":"stopping"');
-        }, 30000, 2000); // Espera até 30 segundos, verificando a cada 2 segundos
+            
+            // VERIFICAÇÃO ROBUSTA: Primeiro, verifica se o comando falhou.
+            if (result.code !== 0) {
+                // Se o comando 'describe' falhar, pode ser porque o bot já foi parado e não está "ativo".
+                // Isto não é necessariamente um erro fatal, mas logamos para depuração.
+                // O mais importante é verificar o jlist a seguir.
+                sendProgress(`Aviso: 'pm2 describe' falhou. A verificar a lista geral de processos... (stderr: ${result.stderr})`);
+                const jlistResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
+                if (jlistResult.code === 0) {
+                    const bots = JSON.parse(jlistResult.stdout);
+                    const bot = bots.find(b => b.name === name);
+                    // Se não encontrar o bot, ou se o status for stopped/errored, consideramos parado.
+                    if (!bot || bot.pm2_env.status === 'stopped' || bot.pm2_env.status === 'errored') {
+                        return true;
+                    }
+                }
+                return false; // Se a verificação alternativa também não confirmar, continue a tentar.
+            }
+
+            // Se o comando 'describe' funcionou, verifica o status.
+            const statusOk = result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"') || result.stdout.includes('"status":"stopping"');
+            return statusOk;
+        }, 30000, 2000);
 
         if (!isStopped) {
-            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
+            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança. Verifique os logs do servidor PM2.`);
         }
-        sendProgress(`Bot parado com sucesso.`);
+        sendProgress(`Bot confirmado como parado.`);
 
-        // 3. Apagar a pasta de sessão
         sendProgress(`A apagar pastas de sessão...`);
         const sessionPath = path.join(botDirectory, '.wwebjs_auth');
-        await ssh.execCommand(`rm -rf ${sessionPath}`);
+        const rmResult = await ssh.execCommand(`rm -rf ${sessionPath}`);
+        if(rmResult.code !== 0){
+             throw new Error(`Falha ao executar o comando para apagar a pasta de sessão: ${rmResult.stderr}`);
+        }
         
-        // 4. Verificar se a pasta foi realmente apagada
         sendProgress(`A verificar se a pasta foi apagada...`);
         const checkDeletion = await waitForCondition(async () => {
             const result = await ssh.execCommand(`test -d ${sessionPath} && echo "exists" || echo "deleted"`);
@@ -299,11 +317,10 @@ async function handleResetSession(ws, data) {
         }, 10000, 1000);
 
         if (!checkDeletion) {
-            throw new Error(`Não foi possível apagar a pasta de sessão: ${sessionPath}. Verifique as permissões.`);
+            throw new Error(`Não foi possível confirmar a eliminação da pasta de sessão: ${sessionPath}. Verifique as permissões.`);
         }
         sendProgress(`Verificação concluída. Pasta apagada.`);
 
-        // 5. Iniciar o bot novamente
         sendProgress(`A iniciar o bot novamente...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 start ${name}`);
 
@@ -314,9 +331,8 @@ async function handleResetSession(ws, data) {
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
         sendProgress(`A tentar reiniciar o bot para o estado anterior...`);
-        // Tenta reiniciar o bot em caso de falha para não o deixar parado
-        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(()=>{
-            sendProgress(`Não foi possível reiniciar o bot. Verifique o estado manualmente.`);
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch((err)=>{
+             sendProgress(`AVISO: Não foi possível reiniciar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);
         });
     } finally {
         if (ssh.connection) {
