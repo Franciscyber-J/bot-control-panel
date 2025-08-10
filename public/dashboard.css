@@ -1,3 +1,4 @@
+/* ARQUIVO: public/dashboard.css (COMPLETO E CORRIGIDO) */
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap');
 
 :root {
@@ -194,15 +195,16 @@ body::before {
 .modal-description { color: var(--text-secondary); margin-bottom: 1.5rem; text-align: center; font-size: 0.9rem; }
 .form-group { margin-bottom: 1.5rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); }
-.form-group input {
+.form-group input, .form-group textarea {
     width: 100%; padding: 0.8rem 1rem;
     background-color: var(--bg-main);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-primary);
     transition: all 0.2s;
+    font-family: var(--font-family);
 }
-.form-group input:focus {
+.form-group input:focus, .form-group textarea:focus {
     outline: none; border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
@@ -219,4 +221,45 @@ body::before {
     text-align: center; border-top: 1px solid var(--border-color);
     padding-top: 1.5rem; margin-top: 2rem;
     font-size: 0.9rem; color: var(--text-secondary);
+}
+
+/* #################### NOVOS ESTILOS PARA NOTIFICAÇÕES #################### */
+
+.info-message {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.notification-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    background-color: var(--bg-main);
+}
+.notification-item:last-child {
+    margin-bottom: 0;
+}
+.notification-item strong {
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+.notification-item small {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.notification-item-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.notification-item-actions .action-btn-footer {
+    padding: 0.6rem 0.8rem;
 }

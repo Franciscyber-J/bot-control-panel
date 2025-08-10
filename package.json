@@ -15,6 +15,7 @@
     "express": "^4.19.2",
     "express-session": "^1.18.2",
     "node-ssh": "^13.2.0",
+    "node-telegram-bot-api": "^0.64.0",
     "uuid": "^11.1.0",
     "ws": "^8.18.3"
   }

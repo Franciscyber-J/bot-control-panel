@@ -113,10 +113,55 @@
     
     <input type="file" id="env-file-input" style="display: none;" accept=".env">
 
-    <script>
-        // Global variable for the log WebSocket so it can be managed
-        let currentLogSocket = null;
+    <div id="notification-manager-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="notification-manager-title">Gerir Notificações</h2>
+            <div id="notification-list-container" class="form-group">
+                </div>
+            <div class="modal-actions">
+                <button type="button" class="action-btn primary" id="add-new-notification-btn">Adicionar Nova Notificação</button>
+                <button type="button" class="action-btn close-modal-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
 
+    <div id="edit-notification-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="edit-notification-title">Adicionar/Editar Notificação</h2>
+            <form id="edit-notification-form">
+                <input type="hidden" id="notification-id">
+                <div class="form-group">
+                    <label for="notification-name">Nome da Notificação (para sua identificação, ex: Alertas Admin)</label>
+                    <input type="text" id="notification-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="notification-token">Token do Bot do Telegram</label>
+                    <input type="password" id="notification-token" required>
+                </div>
+                <div class="form-group">
+                    <label for="notification-chat-id">Chat ID do Telegram (para onde a mensagem será enviada)</label>
+                    <input type="text" id="notification-chat-id" required>
+                </div>
+                 <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: -1rem; margin-bottom: 2rem;">
+                    Nunca partilhe os seus tokens. Eles serão guardados de forma segura no ficheiro .env do seu bot no servidor.
+                </p>
+                <div class="modal-actions">
+                    <button type="submit" class="action-btn primary">Salvar e Reiniciar Bot</button>
+                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        // #################### LÓGICA JAVASCRIPT COMPLETA ####################
+        
+        // --- Variáveis Globais ---
+        let currentLogSocket = null;
+        let currentBotForNotifications = null;
+
+        // --- Funções de UI Genéricas (Modais e Notificações) ---
         function showNotification(title, message, type = 'info') {
             const modal = document.getElementById('notification-modal');
             modal.querySelector('#notification-title').textContent = title;
@@ -133,6 +178,10 @@
 
                 const btnYes = document.getElementById('confirm-btn-yes');
                 const btnNo = document.getElementById('confirm-btn-no');
+
+                // Garante que os eventos são únicos para esta chamada
+                btnYes.onclick = null;
+                btnNo.onclick = null;
 
                 btnYes.onclick = () => {
                     modal.style.display = 'none';
@@ -158,7 +207,7 @@
             return response.json();
         }
         
-        // --- Bot Management Functions ---
+        // --- Lógica de Gestão de Bots (Existente) ---
         async function manageBot(name, action) {
             const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
             const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
@@ -171,7 +220,6 @@
                     body: JSON.stringify({ name, action })
                 });
                 showNotification('Sucesso', result.message);
-                // No need to call loadBots(), WebSocket will update the UI
             } catch (error) {
                 showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
             }
@@ -199,7 +247,6 @@
             logModalTitle.textContent = `Logs de ${name} (a conectar...)`;
             logContent.textContent = 'A carregar histórico de logs...';
 
-            // First, get historical logs via API
             try {
                 const result = await fetchWithAuth(`/api/bots/logs/${name}`);
                 logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
@@ -208,7 +255,6 @@
                 logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`;
             }
             
-            // Then, establish a WebSocket connection for real-time logs
             if (currentLogSocket) currentLogSocket.close();
 
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -291,6 +337,88 @@
             };
             fileInput.click();
         }
+
+        // --- Nova Lógica de Gestão de Notificações ---
+        
+        async function showNotificationManager(botName, scriptPath) {
+            currentBotForNotifications = { name: botName, scriptPath };
+            const modal = document.getElementById('notification-manager-modal');
+            const title = document.getElementById('notification-manager-title');
+            const container = document.getElementById('notification-list-container');
+            
+            title.textContent = `Gerir Notificações de "${botName}"`;
+            container.innerHTML = '<p>A carregar configurações...</p>';
+            modal.style.display = 'flex';
+
+            try {
+                const url = `/api/bots/notifications/${encodeURIComponent(botName)}?scriptPath=${encodeURIComponent(scriptPath)}`;
+                const data = await fetchWithAuth(url);
+                renderNotificationList(data.notifications, data.notifierInjected);
+            } catch (error) {
+                container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`;
+            }
+        }
+
+        function renderNotificationList(notifications = [], notifierInjected) {
+            const container = document.getElementById('notification-list-container');
+            if (notifications.length === 0) {
+                container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+            } else {
+                container.innerHTML = notifications.map(notif => `
+                    <div class="notification-item">
+                        <div>
+                            <strong>${notif.name}</strong><br>
+                            <small>Chat ID: ${notif.chatId} | Token: **********</small>
+                        </div>
+                        <div class="notification-item-actions">
+                            <button class="action-btn-footer" onclick='testNotification(${JSON.stringify(notif)})'><i data-feather="send"></i> Testar</button>
+                            <button class="action-btn-footer" onclick='showEditNotificationModal(${JSON.stringify(notif)})'><i data-feather="edit"></i> Editar</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            if (!notifierInjected && notifications.length > 0) {
+                 container.innerHTML += `<p class="info-message" style="color: var(--yellow); margin-top: 1rem;">
+                    Aviso: A configuração foi salva, mas o código de envio de notificações ainda precisa ser utilizado no script principal do seu bot. Adicione a linha <code>const { sendNotification } = require('./telegramNotifier.js');</code> no topo do seu script.
+                 </p>`;
+            }
+            feather.replace();
+        }
+        
+        function showEditNotificationModal(notification = null) {
+            const modal = document.getElementById('edit-notification-modal');
+            const form = document.getElementById('edit-notification-form');
+            form.reset();
+            
+            if (notification) {
+                document.getElementById('edit-notification-title').textContent = "Editar Notificação";
+                document.getElementById('notification-id').value = notification.id;
+                document.getElementById('notification-name').value = notification.name;
+                document.getElementById('notification-token').value = notification.token;
+                document.getElementById('notification-chat-id').value = notification.chatId;
+            } else {
+                document.getElementById('edit-notification-title').textContent = "Adicionar Nova Notificação";
+                document.getElementById('notification-id').value = Date.now();
+            }
+            modal.style.display = 'flex';
+        }
+
+        async function testNotification(notification) {
+             try {
+                const result = await fetchWithAuth('/api/bots/notifications/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: notification.token,
+                        chatId: notification.chatId,
+                        message: `Olá! Esta é uma mensagem de teste enviada a partir do seu Painel de Controlo para a notificação "${notification.name}".`
+                    })
+                });
+                showNotification('Sucesso', result.message);
+            } catch (error) {
+                showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
+            }
+        }
         
         // --- UI Rendering ---
         function renderBot(bot) {
@@ -317,6 +445,7 @@
                         <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')" ${!isOnline ? 'disabled' : ''}>Parar</button>
                     </div>
                     <div class="card-footer-actions">
+                        <button class="action-btn-footer" onclick="showNotificationManager('${bot.name}', '${scriptPath}')"><i data-feather="bell"></i>Notificações</button>
                         <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')"><i data-feather="upload-cloud"></i>Enviar .env</button>
                         <button class="action-btn-footer" onclick="showLogs('${bot.name}')"><i data-feather="terminal"></i>Logs</button>
                         <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')"><i data-feather="git-pull-request"></i>Atualizar</button>
@@ -328,7 +457,7 @@
 
         function loadBots(bots = []) {
             const botListContainer = document.getElementById('bot-list');
-            if (bots.length > 0) {
+            if (bots && bots.length > 0) {
                 botListContainer.innerHTML = bots.map(renderBot).join('');
             } else {
                 botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>';
@@ -336,7 +465,7 @@
             feather.replace();
         }
 
-        // --- WebSocket Connection for Dashboard ---
+        // --- WebSocket Connection ---
         function connectDashboardSocket() {
             const statusElement = document.getElementById('connection-status');
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -362,7 +491,6 @@
             socket.onclose = () => {
                 statusElement.textContent = 'Desconectado. Tentando reconectar...';
                 statusElement.style.color = 'var(--red)';
-                // Simple reconnect logic
                 setTimeout(connectDashboardSocket, 3000);
             };
 
@@ -434,7 +562,38 @@
                 }
             });
             
-            // Initial call to load icons and connect WebSocket
+            // Listener para o formulário de notificação
+            document.getElementById('edit-notification-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const notification = {
+                    id: document.getElementById('notification-id').value,
+                    name: document.getElementById('notification-name').value,
+                    token: document.getElementById('notification-token').value,
+                    chatId: document.getElementById('notification-chat-id').value,
+                };
+
+                try {
+                    const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            scriptPath: currentBotForNotifications.scriptPath,
+                            notification: notification
+                        })
+                    });
+                    document.getElementById('edit-notification-modal').style.display = 'none';
+                    showNotification('Sucesso', result.message);
+                    showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath);
+                } catch (error) {
+                    showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error');
+                }
+            });
+
+            // Listener para o botão "Adicionar Nova Notificação"
+            document.getElementById('add-new-notification-btn').addEventListener('click', () => {
+                showEditNotificationModal();
+            });
+
             feather.replace();
             connectDashboardSocket();
         });
