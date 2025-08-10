@@ -1,4 +1,4 @@
-// ARQUIVO: routes/bots.js (COMPLETO E CORRIGIDO)
+// ARQUIVO: routes/bots.js (COMPLETO E COM CORREÇÃO DEFINITIVA DE DIRETÓRIO)
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -19,7 +19,6 @@ const BASE_BOT_PATH = process.env.BASE_BOT_PATH || '/root';
 
 // #################### ROTAS DE GESTÃO DE BOTS ####################
 
-// ROTA CORRIGIDA PARA INICIAR O BOT NO DIRETÓRIO CORRETO
 router.post('/bots/add-from-git', async (req, res) => {
     const { gitUrl, name, envContent } = req.body;
     if (!gitUrl || !name || !envContent) {
@@ -59,12 +58,13 @@ router.post('/bots/add-from-git', async (req, res) => {
         const mainScript = packageJson.main || (packageJson.scripts && packageJson.scripts.start ? packageJson.scripts.start.split(' ').pop() : null);
         if (!mainScript) throw new Error('Não foi possível encontrar a entrada "main" ou "scripts.start" no package.json.');
         
-        const scriptPath = path.posix.join(botDirectory, mainScript);
-        outputLog += `> Script principal encontrado: ${scriptPath}\n\n`;
+        outputLog += `> Script principal encontrado: ${mainScript}\n\n`;
 
-        outputLog += `> Iniciando o bot com PM2 no diretório correto...\n`;
-        // ### CORREÇÃO PRINCIPAL APLICADA AQUI ###
-        const pm2Result = await ssh.execCommand(`${NVM_PREFIX}pm2 start "${scriptPath}" --name "${name}" --cwd "${botDirectory}"`);
+        outputLog += `> Iniciando o bot com PM2 (replicando os passos manuais)...\n`;
+        // ### CORREÇÃO DEFINITIVA APLICADA AQUI ###
+        // Este comando agora muda para o diretório do bot ANTES de iniciar, garantindo o contexto correto.
+        const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
+        const pm2Result = await ssh.execCommand(pm2Command);
         if (pm2Result.code !== 0) throw new Error(`Falha ao iniciar o bot com PM2: ${pm2Result.stderr}`);
         outputLog += pm2Result.stdout + '\n\n';
 
