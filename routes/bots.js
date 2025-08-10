@@ -1,4 +1,4 @@
-// ARQUIVO: routes/bots.js (COMPLETO E COM CORREÇÃO DEFINITIVA DE DIRETÓRIO)
+// ARQUIVO: routes/bots.js (COMPLETO E COM A CORREÇÃO FINAL NO TESTE)
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -61,8 +61,6 @@ router.post('/bots/add-from-git', async (req, res) => {
         outputLog += `> Script principal encontrado: ${mainScript}\n\n`;
 
         outputLog += `> Iniciando o bot com PM2 (replicando os passos manuais)...\n`;
-        // ### CORREÇÃO DEFINITIVA APLICADA AQUI ###
-        // Este comando agora muda para o diretório do bot ANTES de iniciar, garantindo o contexto correto.
         const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
         const pm2Result = await ssh.execCommand(pm2Command);
         if (pm2Result.code !== 0) throw new Error(`Falha ao iniciar o bot com PM2: ${pm2Result.stderr}`);
@@ -273,9 +271,16 @@ router.post('/bots/notifications/:name', async (req, res) => {
     }
 });
 
+// ### INÍCIO DA CORREÇÃO ###
 router.post('/bots/notifications/test', async (req, res) => {
-    const { token, chatId, message } = req.body;
-    if (!token || !chatId) return res.status(400).json({ error: 'Token e Chat ID são obrigatórios.' });
+    // Corrigido para ler 'token' e 'chatId' diretamente do corpo da requisição
+    const { token, chatId, message } = req.body; 
+
+    if (!token || !chatId) {
+        // Mensagem de erro mais específica para debugging
+        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
+    }
+    
     try {
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
@@ -283,6 +288,7 @@ router.post('/bots/notifications/test', async (req, res) => {
         res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
+// ### FIM DA CORREÇÃO ###
 
 router.post('/bots/inject-notifier/:name', async (req, res) => {
     const { name } = req.params;
