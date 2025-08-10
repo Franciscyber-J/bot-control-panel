@@ -239,6 +239,7 @@ wss.on('connection', (ws, request) => {
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
+// ########## FUNÇÃO CORRIGIDA ##########
 async function handleResetSession(ws, data) {
     const { name, scriptPath } = data;
     const sendProgress = (message) => {
@@ -250,6 +251,7 @@ async function handleResetSession(ws, data) {
     const ssh = new NodeSSH();
     const botDirectory = path.dirname(scriptPath);
 
+    // Função auxiliar para esperar por uma condição com timeouts
     const waitForCondition = async (condition, timeout = 30000, interval = 2000) => {
         const startTime = Date.now();
         while (Date.now() - startTime < timeout) {
@@ -267,47 +269,62 @@ async function handleResetSession(ws, data) {
         sendProgress(`Iniciando limpeza de sessão para '${name}'...`);
         sendProgress(`Aguarde, isto pode demorar um pouco.`);
 
+        // 1. Parar o bot
         sendProgress(`A parar o bot...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
 
+        // 2. Monitorizar até que o bot esteja realmente parado
         sendProgress(`A verificar se o bot está parado...`);
         const isStopped = await waitForCondition(async () => {
             const result = await ssh.execCommand(`${NVM_PREFIX}pm2 describe ${name}`);
-            return result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"');
-        });
+            // Um bot parado pode ter o status "stopped", "stopping" ou "errored". Todos são aceitáveis para prosseguir.
+            return result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"') || result.stdout.includes('"status":"stopping"');
+        }, 30000, 2000); // Espera até 30 segundos, verificando a cada 2 segundos
+
         if (!isStopped) {
             throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
         }
         sendProgress(`Bot parado com sucesso.`);
 
+        // 3. Apagar a pasta de sessão
         sendProgress(`A apagar pastas de sessão...`);
         const sessionPath = path.join(botDirectory, '.wwebjs_auth');
         await ssh.execCommand(`rm -rf ${sessionPath}`);
         
+        // 4. Verificar se a pasta foi realmente apagada
         sendProgress(`A verificar se a pasta foi apagada...`);
-        const checkDeletion = await ssh.execCommand(`test -d ${sessionPath} && echo "exists" || echo "deleted"`);
-        if (checkDeletion.stdout.includes('exists')) {
-            throw new Error(`Não foi possível apagar a pasta de sessão: ${sessionPath}.`);
+        const checkDeletion = await waitForCondition(async () => {
+            const result = await ssh.execCommand(`test -d ${sessionPath} && echo "exists" || echo "deleted"`);
+            return result.stdout.includes('deleted');
+        }, 10000, 1000);
+
+        if (!checkDeletion) {
+            throw new Error(`Não foi possível apagar a pasta de sessão: ${sessionPath}. Verifique as permissões.`);
         }
         sendProgress(`Verificação concluída. Pasta apagada.`);
 
+        // 5. Iniciar o bot novamente
         sendProgress(`A iniciar o bot novamente...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 start ${name}`);
 
         sendProgress(`\nPROCESSO CONCLUÍDO COM SUCESSO!`);
         sendProgress(`O bot '${name}' foi reiniciado e irá gerar um novo QR Code.`);
-        sendProgress(`Por favor, observe os logs do bot abaixo para ler o QR Code.`);
+        sendProgress(`Por favor, observe os logs do bot para ler o QR Code.`);
 
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
         sendProgress(`A tentar reiniciar o bot para o estado anterior...`);
-        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(()=>{});
+        // Tenta reiniciar o bot em caso de falha para não o deixar parado
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(()=>{
+            sendProgress(`Não foi possível reiniciar o bot. Verifique o estado manualmente.`);
+        });
     } finally {
         if (ssh.connection) {
             ssh.dispose();
         }
     }
 }
+// #########################################
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
