@@ -111,7 +111,7 @@ body::before {
 
 .bot-list-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); /* Aumentado para garantir espaço */
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
     gap: 1.5rem;
 }
 
@@ -209,10 +209,10 @@ body::before {
     margin-top: 1rem;
     padding-top: 1rem;
     display: flex;
-    justify-content: space-around;
+    justify-content: center; /* Alterado para centralizar */
     align-items: center;
-    gap: 0.25rem;
-    flex-wrap: nowrap; /* Garante que os botões não quebrem a linha */
+    gap: 1rem; /* Aumentado para melhor espaçamento */
+    flex-wrap: nowrap;
 }
 .action-btn-footer {
     background: none;
