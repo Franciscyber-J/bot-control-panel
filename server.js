@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E COM CORREÇÃO DEFINITIVA)
+// ARQUIVO: server.js (COMPLETO E COM LÓGICA DE LOGOUT)
 
 require('dotenv').config();
 const express = require('express');
@@ -127,7 +127,6 @@ const sshConfig = {
 };
 const dashboardClients = new Set();
 
-// Esta função já é fiável, vamos reutilizá-la
 async function getBotsStatus(sshInstance) {
     const ssh = sshInstance || new NodeSSH();
     const shouldDispose = !sshInstance;
@@ -147,7 +146,6 @@ async function getBotsStatus(sshInstance) {
         if (shouldDispose && ssh.connection) ssh.dispose();
     }
 }
-
 
 async function broadcastStatus() {
     if (dashboardClients.size === 0) return;
@@ -220,7 +218,6 @@ wss.on('connection', (ws, request) => {
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
-// ########## FUNÇÃO COM A CORREÇÃO FINAL ##########
 async function handleResetSession(ws, data) {
     const { name, scriptPath } = data;
     const sendProgress = (message) => {
@@ -230,9 +227,9 @@ async function handleResetSession(ws, data) {
     };
     
     const ssh = new NodeSSH();
-    const botDirectory = path.dirname(scriptPath);
+    const botDirectory = path.posix.dirname(scriptPath);
 
-    const waitForCondition = async (condition, timeout = 30000, interval = 2000) => {
+    const waitForCondition = async (condition, timeout = 45000, interval = 3000) => {
         const startTime = Date.now();
         while (Date.now() - startTime < timeout) {
             if (await condition()) return true;
@@ -243,31 +240,33 @@ async function handleResetSession(ws, data) {
 
     try {
         await ssh.connect(sshConfig);
+        sendProgress(`Iniciando procedimento de logout para '${name}'...`);
 
-        sendProgress(`Iniciando limpeza de sessão para '${name}'...`);
+        sendProgress(`A enviar comando de logout para a API do bot na porta 9002...`);
+        const logoutResult = await ssh.execCommand(`curl -X POST http://localhost:9002/logout --max-time 10`);
 
-        sendProgress(`A enviar comando para parar o bot...`);
-        await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
+        if (logoutResult.code !== 0) {
+            sendProgress(`AVISO: Não foi possível contactar a API de logout do bot (${logoutResult.stderr}).`);
+            sendProgress(`A prosseguir com o método antigo: Parar o processo manualmente.`);
+            await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
+        } else {
+            sendProgress("Comando de logout enviado. O bot deverá parar sozinho.");
+        }
 
-        sendProgress(`A verificar se o bot está parado...`);
+        sendProgress(`A aguardar a confirmação de que o processo parou...`);
         const isStopped = await waitForCondition(async () => {
-            // LÓGICA DE VERIFICAÇÃO FIÁVEL: USA A MESMA FUNÇÃO DO DASHBOARD
             const statuses = await getBotsStatus(ssh);
             const botInfo = statuses.find(b => b.name === name);
-            // Considera-se parado se não for encontrado ou se o status for 'stopped' ou 'errored'
-            if (!botInfo || ['stopped', 'errored'].includes(botInfo.pm2_env.status)) {
-                return true;
-            }
-            return false;
+            return !botInfo || ['stopped', 'errored'].includes(botInfo.pm2_env.status);
         });
 
         if (!isStopped) {
             throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
         }
         sendProgress(`Bot confirmado como parado.`);
-
+        
         sendProgress(`A apagar a pasta de sessão .wwebjs_auth...`);
-        const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth'); // Usar path.posix para garantir barras corretas
+        const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth');
         const rmResult = await ssh.execCommand(`rm -rf "${sessionPath}"`);
         if(rmResult.code !== 0){
              throw new Error(`Falha ao executar o comando para apagar a pasta de sessão: ${rmResult.stderr}`);
@@ -284,16 +283,16 @@ async function handleResetSession(ws, data) {
         }
         sendProgress(`Verificação concluída. Pasta apagada.`);
 
-        sendProgress(`A iniciar o bot novamente...`);
-        await ssh.execCommand(`${NVM_PREFIX}pm2 start ${name}`);
+        sendProgress(`A iniciar o bot novamente para gerar um novo QR Code...`);
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`);
 
         sendProgress(`\nPROCESSO CONCLUÍDO COM SUCESSO!`);
-        sendProgress(`O bot '${name}' foi reiniciado e irá gerar um novo QR Code.`);
-        sendProgress(`Por favor, observe os logs do bot para ler o QR Code.`);
+        sendProgress(`O bot '${name}' foi reiniciado.`);
+        sendProgress(`Por favor, observe os logs do bot para ler o novo QR Code.`);
 
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
-        sendProgress(`A tentar reiniciar o bot para o estado anterior...`);
+        sendProgress(`A tentar restaurar o bot para um estado funcional...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch((err)=>{
              sendProgress(`AVISO: Não foi possível reiniciar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);
         });
