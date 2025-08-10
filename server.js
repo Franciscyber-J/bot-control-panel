@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E COM LÓGICA DE LOGOUT)
+// ARQUIVO: server.js (COMPLETO E COM A CORREÇÃO FINAL PARA BOTS EXISTENTES)
 
 require('dotenv').config();
 const express = require('express');
@@ -136,8 +136,10 @@ async function getBotsStatus(sshInstance) {
         const result = await ssh.execCommand(command);
         if (result.code !== 0) {
             console.error('Falha ao obter a lista de bots:', result.stderr);
-            throw new Error(`Falha ao executar pm2 jlist: ${result.stderr}`);
+            return []; // Retorna array vazio em caso de erro para não quebrar a lógica seguinte
         }
+        // Se stdout estiver vazio, pm2 pode não ter processos, retorna array vazio
+        if (!result.stdout) return [];
         return JSON.parse(result.stdout);
     } catch (error) {
         console.error(`Falha ao buscar status dos bots: ${error.message}`);
@@ -219,7 +221,7 @@ wss.on('connection', (ws, request) => {
 });
 
 async function handleResetSession(ws, data) {
-    const { name, scriptPath } = data;
+    const { name, scriptPath } = data; // scriptPath é o caminho completo para o script principal
     const sendProgress = (message) => {
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ type: 'progress', message: `[PAINEL] ${message}` }));
@@ -228,73 +230,50 @@ async function handleResetSession(ws, data) {
     
     const ssh = new NodeSSH();
     const botDirectory = path.posix.dirname(scriptPath);
-
-    const waitForCondition = async (condition, timeout = 45000, interval = 3000) => {
-        const startTime = Date.now();
-        while (Date.now() - startTime < timeout) {
-            if (await condition()) return true;
-            await new Promise(resolve => setTimeout(resolve, interval));
-        }
-        return false;
-    };
+    const mainScript = path.posix.basename(scriptPath);
 
     try {
         await ssh.connect(sshConfig);
-        sendProgress(`Iniciando procedimento de logout para '${name}'...`);
+        sendProgress(`Iniciando procedimento para gerar novo QR Code para '${name}'...`);
 
-        sendProgress(`A enviar comando de logout para a API do bot na porta 9002...`);
-        const logoutResult = await ssh.execCommand(`curl -X POST http://localhost:9002/logout --max-time 10`);
-
-        if (logoutResult.code !== 0) {
-            sendProgress(`AVISO: Não foi possível contactar a API de logout do bot (${logoutResult.stderr}).`);
-            sendProgress(`A prosseguir com o método antigo: Parar o processo manualmente.`);
-            await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
-        } else {
-            sendProgress("Comando de logout enviado. O bot deverá parar sozinho.");
+        // PASSO 1: Parar e apagar o processo da lista do PM2 para limpar a configuração antiga.
+        // Isto NÃO apaga os ficheiros do bot.
+        sendProgress(`A parar e a remover o processo '${name}' do PM2 para limpar a configuração...`);
+        const deleteResult = await ssh.execCommand(`${NVM_PREFIX}pm2 delete ${name}`);
+        // Ignoramos o erro se o processo não existir, o que é aceitável.
+        if (deleteResult.code !== 0 && !deleteResult.stderr.includes('not found')) {
+            throw new Error(`Falha ao remover o processo do PM2: ${deleteResult.stderr}`);
         }
-
-        sendProgress(`A aguardar a confirmação de que o processo parou...`);
-        const isStopped = await waitForCondition(async () => {
-            const statuses = await getBotsStatus(ssh);
-            const botInfo = statuses.find(b => b.name === name);
-            return !botInfo || ['stopped', 'errored'].includes(botInfo.pm2_env.status);
-        });
-
-        if (!isStopped) {
-            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
-        }
-        sendProgress(`Bot confirmado como parado.`);
+        sendProgress(`Processo removido da lista do PM2 com sucesso.`);
         
+        // PASSO 2: Apagar a pasta de sessão para forçar a regeneração do QR Code.
         sendProgress(`A apagar a pasta de sessão .wwebjs_auth...`);
         const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth');
         const rmResult = await ssh.execCommand(`rm -rf "${sessionPath}"`);
         if(rmResult.code !== 0){
              throw new Error(`Falha ao executar o comando para apagar a pasta de sessão: ${rmResult.stderr}`);
         }
-        
-        sendProgress(`A verificar se a pasta foi apagada...`);
-        const checkDeletion = await waitForCondition(async () => {
-            const result = await ssh.execCommand(`test -d "${sessionPath}" && echo "exists" || echo "deleted"`);
-            return result.stdout.includes('deleted');
-        }, 10000, 1000);
+        sendProgress(`Pasta de sessão apagada.`);
 
-        if (!checkDeletion) {
-            throw new Error(`Não foi possível confirmar a eliminação da pasta de sessão: ${sessionPath}. Verifique as permissões.`);
+        // PASSO 3: Iniciar o bot novamente, mas da maneira correta, replicando os passos manuais.
+        sendProgress(`A iniciar o bot novamente com o diretório de trabalho correto...`);
+        const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
+        const pm2Result = await ssh.execCommand(pm2Command);
+        if (pm2Result.code !== 0) {
+            throw new Error(`Falha ao iniciar o bot com PM2: ${pm2Result.stderr}`);
         }
-        sendProgress(`Verificação concluída. Pasta apagada.`);
-
-        sendProgress(`A iniciar o bot novamente para gerar um novo QR Code...`);
-        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`);
-
+        
         sendProgress(`\nPROCESSO CONCLUÍDO COM SUCESSO!`);
-        sendProgress(`O bot '${name}' foi reiniciado.`);
-        sendProgress(`Por favor, observe os logs do bot para ler o novo QR Code.`);
+        sendProgress(`O bot '${name}' foi reiniciado corretamente.`);
+        sendProgress(`Por favor, observe os logs para ler o novo QR Code.`);
 
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
-        sendProgress(`A tentar restaurar o bot para um estado funcional...`);
-        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch((err)=>{
-             sendProgress(`AVISO: Não foi possível reiniciar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);
+        sendProgress(`Ocorreu um erro. A tentar restaurar o bot...`);
+        // Tenta iniciar o bot novamente em caso de falha.
+        const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
+        await ssh.execCommand(pm2Command).catch((err)=>{
+             sendProgress(`AVISO: Não foi possível restaurar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);
         });
     } finally {
         if (ssh.connection) {
