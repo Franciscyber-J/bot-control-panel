@@ -112,14 +112,12 @@ router.post('/bots/manage', async (req, res) => {
         await ssh.connect(sshConfig);
         const command = `${NVM_PREFIX}pm2 ${action} ${name}`;
         const result = await ssh.execCommand(command);
-
         if (result.code !== 0) {
             throw new Error(result.stderr || `O comando \`pm2 ${action} ${name}\` falhou.`);
         }
         
         res.json({ message: `Ação '${action}' executada com sucesso para o bot '${name}'.` });
         if (router.broadcastStatus) await router.broadcastStatus();
-
     } catch (error) {
         res.status(500).json({ error: `Falha ao executar a ação '${action}' no bot '${name}'. Detalhe: ${error.message}` });
     } finally {
@@ -143,21 +141,18 @@ router.post('/bots/env/:name', async (req, res) => {
         const base64Content = Buffer.from(content).toString('base64');
         const writeCommand = `echo ${base64Content} | base64 --decode > ${envPath}`;
         const writeResult = await ssh.execCommand(writeCommand);
-
         if (writeResult.code !== 0) {
             throw new Error(writeResult.stderr || 'Falha ao escrever o ficheiro .env no servidor.');
         }
 
         const reloadCommand = `${NVM_PREFIX}pm2 reload ${name}`;
         const reloadResult = await ssh.execCommand(reloadCommand);
-
         if (reloadResult.code !== 0) {
             throw new Error(reloadResult.stderr || `Ficheiro .env atualizado, mas falha ao reiniciar o bot '${name}'.`);
         }
         
         res.json({ message: `Ficheiro .env para o bot '${name}' atualizado e bot reiniciado com sucesso.` });
         if (router.broadcastStatus) await router.broadcastStatus();
-
     } catch (error) {
         res.status(500).json({ error: `Falha ao atualizar o ficheiro .env. Detalhe: ${error.message}` });
     } finally {
@@ -172,14 +167,12 @@ router.delete('/bots/delete/:name', async (req, res) => {
         await ssh.connect(sshConfig);
         const command = `${NVM_PREFIX}pm2 delete ${name}`;
         const result = await ssh.execCommand(command);
-
         if (result.code !== 0) {
             throw new Error(result.stderr || `Falha ao excluir o bot '${name}'.`);
         }
         
         res.json({ message: `Bot '${name}' parado e excluído com sucesso.` });
         if (router.broadcastStatus) await router.broadcastStatus();
-
     } catch (error) {
         res.status(500).json({ error: `Falha ao excluir o bot. Detalhe: ${error.message}` });
     } finally {
@@ -194,12 +187,10 @@ router.get('/bots/logs/:name', async (req, res) => {
         await ssh.connect(sshConfig);
         const command = `${NVM_PREFIX}pm2 logs ${name} --lines 100 --nostream`;
         const result = await ssh.execCommand(command);
-
         if (result.stderr && !result.stdout) {
             throw new Error(result.stderr);
         }
         res.json({ logs: result.stdout || 'Nenhum log disponível.' });
-
     } catch (error) {
         res.status(500).json({ error: `Falha ao buscar logs do bot. Detalhe: ${error.message}` });
     } finally {
@@ -236,10 +227,8 @@ router.post('/bots/update/:name', async (req, res) => {
             }
             fullOutput += `${result.stdout}\n\n`;
         }
-
         res.json({ message: `Deploy do bot '${name}' concluído com sucesso.`, output: fullOutput });
         if (router.broadcastStatus) await router.broadcastStatus();
-
     } catch (error) {
         res.status(500).json({ error: `Falha no deploy do bot. Detalhe: ${error.message}` });
     } finally {
@@ -252,9 +241,7 @@ router.post('/bots/update/:name', async (req, res) => {
 router.get('/bots/notifications/:name', async (req, res) => {
     const { name } = req.params;
     const { scriptPath } = req.query;
-    if (!name || !scriptPath) {
-        return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
-    }
+    if (!name || !scriptPath) return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
 
     const botDirectory = path.dirname(scriptPath);
     const envPath = path.join(botDirectory, '.env');
@@ -269,9 +256,7 @@ router.get('/bots/notifications/:name', async (req, res) => {
         }
 
         const envContentResult = await ssh.execCommand(`cat ${envPath}`);
-        if (envContentResult.code !== 0) {
-            throw new Error(envContentResult.stderr);
-        }
+        if (envContentResult.code !== 0) throw new Error(envContentResult.stderr);
         const notifications = notificationService.parseNotifications(envContentResult.stdout);
         
         const mainScriptContentResult = await ssh.execCommand(`cat ${scriptPath}`);
@@ -290,9 +275,7 @@ router.get('/bots/notifications/:name', async (req, res) => {
 router.post('/bots/notifications/:name', async (req, res) => {
     const { name } = req.params;
     const { scriptPath, notification } = req.body;
-    if (!name || !scriptPath || !notification) {
-        return res.status(400).json({ error: 'Dados incompletos.' });
-    }
+    if (!name || !scriptPath || !notification) return res.status(400).json({ error: 'Dados incompletos.' });
 
     const botDirectory = path.dirname(scriptPath);
     const envPath = path.join(botDirectory, '.env');
@@ -313,9 +296,7 @@ router.post('/bots/notifications/:name', async (req, res) => {
         
         const reloadCommand = `${NVM_PREFIX}pm2 reload ${name}`;
         const reloadResult = await ssh.execCommand(reloadCommand);
-        if (reloadResult.code !== 0) {
-            throw new Error(reloadResult.stderr || `Configuração salva, mas falha ao reiniciar o bot '${name}'.`);
-        }
+        if (reloadResult.code !== 0) throw new Error(reloadResult.stderr || `Configuração salva, mas falha ao reiniciar o bot '${name}'.`);
 
         res.json({ message: 'Notificação salva e bot reiniciado com sucesso.' });
         if (router.broadcastStatus) await router.broadcastStatus();
@@ -330,9 +311,8 @@ router.post('/bots/notifications/:name', async (req, res) => {
 
 router.post('/bots/notifications/test', async (req, res) => {
     const { token, chatId, message } = req.body;
-    if (!token || !chatId) {
-        return res.status(400).json({ error: 'Token e Chat ID são obrigatórios.' });
-    }
+    if (!token || !chatId) return res.status(400).json({ error: 'Token e Chat ID são obrigatórios.' });
+
     try {
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
@@ -344,9 +324,7 @@ router.post('/bots/notifications/test', async (req, res) => {
 router.post('/bots/inject-notifier/:name', async (req, res) => {
     const { name } = req.params;
     const { scriptPath } = req.body;
-    if (!name || !scriptPath) {
-        return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
-    }
+    if (!name || !scriptPath) return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
 
     const ssh = new NodeSSH();
     try {
@@ -382,17 +360,24 @@ router.post('/bots/reset-session/:name', async (req, res) => {
     try {
         await ssh.connect(sshConfig);
         
+        // 1. Para o bot para libertar os ficheiros de sessão
         await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
 
+        // 2. Apaga as pastas de sessão mais comuns de forma segura
+        //    *** ESTA É A CORREÇÃO CRUCIAL ***
+        //    Apaga todo o conteúdo dentro de .wwebjs_auth (incluindo subpastas com clientId),
+        //    e também outras pastas/ficheiros de sessão conhecidos.
         await ssh.execCommand(`rm -rf ${path.join(botDirectory, '.wwebjs_auth')} || true`);
         await ssh.execCommand(`rm -rf ${path.join(botDirectory, 'session')} || true`);
         await ssh.execCommand(`rm -f ${path.join(botDirectory, 'session.json')} || true`);
 
+        // 3. Reinicia o bot. O pm2 irá iniciá-lo novamente.
         await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`);
         
         res.json({ message: `Sessão do bot '${name}' limpa com sucesso. O bot foi reiniciado e irá gerar um novo QR Code.` });
         
     } catch (error) {
+        // Tenta reiniciar o bot mesmo em caso de erro para não o deixar parado
         await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(() => {});
         res.status(500).json({ error: `Falha ao limpar a sessão. Detalhe: ${error.message}` });
     } finally {
