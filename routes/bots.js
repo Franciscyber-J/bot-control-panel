@@ -15,29 +15,76 @@ const sshConfig = {
 };
 
 const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
+const BASE_BOT_PATH = process.env.BASE_BOT_PATH || '/root'; // Define um caminho base para os bots
 
 // #################### ROTAS DE GESTÃO DE BOTS ####################
 
-router.post('/bots/add', async (req, res) => {
-    const { name, scriptPath } = req.body;
-    if (!name || !scriptPath) {
-        return res.status(400).json({ error: 'Nome e caminho do script são obrigatórios.' });
+router.post('/bots/add-from-git', async (req, res) => {
+    const { gitUrl, name } = req.body;
+    if (!gitUrl || !name) {
+        return res.status(400).json({ error: 'URL do Git e Nome do Bot são obrigatórios.' });
     }
-    
+
+    const botDirectory = path.join(BASE_BOT_PATH, name);
     const ssh = new NodeSSH();
+
     try {
         await ssh.connect(sshConfig);
-        const command = `${NVM_PREFIX}pm2 start ${scriptPath} --name ${name}`;
-        const result = await ssh.execCommand(command);
 
-        if (result.code !== 0) {
-            throw new Error(result.stderr || `Falha ao iniciar o bot '${name}'.`);
+        let outputLog = `Iniciando deploy do novo bot '${name}' a partir de ${gitUrl}...\n\n`;
+
+        // 1. Clonar o repositório
+        outputLog += `> Clonando repositório para ${botDirectory}...\n`;
+        const cloneResult = await ssh.execCommand(`git clone ${gitUrl} ${botDirectory}`);
+        if (cloneResult.code !== 0) {
+            throw new Error(`Falha ao clonar o repositório: ${cloneResult.stderr}`);
+        }
+        outputLog += cloneResult.stdout + '\n\n';
+
+        // 2. Instalar dependências
+        outputLog += `> Instalando dependências com npm...\n`;
+        const npmResult = await ssh.execCommand(`${NVM_PREFIX}npm install --prefix ${botDirectory}`);
+        if (npmResult.code !== 0) {
+            throw new Error(`Falha ao instalar dependências: ${npmResult.stderr}`);
+        }
+        outputLog += npmResult.stdout + '\n\n';
+
+        // 3. Encontrar o script principal no package.json
+        outputLog += `> Lendo package.json para encontrar o script principal...\n`;
+        const packageJsonPath = path.join(botDirectory, 'package.json');
+        const catResult = await ssh.execCommand(`cat ${packageJsonPath}`);
+        if (catResult.code !== 0) {
+            throw new Error(`Não foi possível ler o package.json: ${catResult.stderr}`);
         }
         
-        res.json({ message: `Bot '${name}' adicionado e iniciado com sucesso.` });
+        const packageJson = JSON.parse(catResult.stdout);
+        const mainScript = packageJson.main || (packageJson.scripts && packageJson.scripts.start ? packageJson.scripts.start.split(' ').pop() : null);
+
+        if (!mainScript) {
+            throw new Error('Não foi possível encontrar a entrada "main" ou "scripts.start" no package.json.');
+        }
+        
+        const scriptPath = path.join(botDirectory, mainScript);
+        outputLog += `> Script principal encontrado: ${scriptPath}\n\n`;
+
+        // 4. Iniciar o bot com PM2
+        outputLog += `> Iniciando o bot com PM2...\n`;
+        const pm2Result = await ssh.execCommand(`${NVM_PREFIX}pm2 start ${scriptPath} --name ${name}`);
+        if (pm2Result.code !== 0) {
+            throw new Error(`Falha ao iniciar o bot com PM2: ${pm2Result.stderr}`);
+        }
+        outputLog += pm2Result.stdout + '\n\n';
+
+        outputLog += `Bot '${name}' adicionado e iniciado com sucesso!`;
+
+        res.json({ message: outputLog });
         if (router.broadcastStatus) await router.broadcastStatus();
 
     } catch (error) {
+        // Tenta limpar a pasta em caso de falha para não deixar lixo no servidor
+        if (ssh.connection) {
+            await ssh.execCommand(`rm -rf ${botDirectory}`);
+        }
         res.status(500).json({ error: `Falha ao adicionar o bot. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
@@ -312,7 +359,7 @@ router.post('/bots/inject-notifier/:name', async (req, res) => {
 });
 
 
-// #################### NOVA ROTA PARA LIMPAR SESSÃO ####################
+// #################### ROTA PARA LIMPAR SESSÃO DO WHATSAPP ####################
 
 router.post('/bots/reset-session/:name', async (req, res) => {
     const { name } = req.params;

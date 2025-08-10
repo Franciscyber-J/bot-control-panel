@@ -211,7 +211,7 @@ body::before {
     display: flex;
     justify-content: center; /* Centraliza os botões */
     align-items: center;
-    gap: 0.5rem; /* Ajusta o espaçamento entre botões */
+    gap: 0.5rem; /* Ajusta o espaçamento */
     flex-wrap: nowrap;
 }
 .action-btn-footer {
