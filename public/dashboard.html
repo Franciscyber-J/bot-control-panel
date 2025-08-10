@@ -176,7 +176,8 @@
     // --- Variáveis Globais ---
     let currentLogSocket = null;
     let currentBotForNotifications = null;
-    let newBotEnvContent = null; // Variável para guardar o conteúdo do .env ao adicionar um novo bot
+    let newBotEnvContent = null;
+    let dashboardSocket = null; // Tornar o socket do dashboard globalmente acessível
 
     // --- Funções de UI Genéricas ---
     function showNotification(title, message, type = 'info') {
@@ -192,13 +193,10 @@
             modal.querySelector('#confirmation-title').textContent = title;
             modal.querySelector('#confirmation-message').innerHTML = message.replace(/\n/g, '<br>');
             modal.style.display = 'flex';
-
             const btnYes = document.getElementById('confirm-btn-yes');
             const btnNo = document.getElementById('confirm-btn-no');
-
             btnYes.onclick = null;
             btnNo.onclick = null;
-
             btnYes.onclick = () => { modal.style.display = 'none'; resolve(true); };
             btnNo.onclick = () => { modal.style.display = 'none'; resolve(false); };
         });
@@ -222,7 +220,6 @@
         const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
         const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
         if (!confirmed) return;
-
         try {
             const result = await fetchWithAuth('/api/bots/manage', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, action })
@@ -236,7 +233,6 @@
     async function deleteBot(name) {
         const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`);
         if (!confirmed) return;
-
         try {
             const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
             showNotification('Sucesso', result.message);
@@ -245,23 +241,29 @@
         }
     }
 
-    async function showLogs(name) {
+    async function showLogs(name, initialMessage = null) {
         const logModal = document.getElementById('log-modal');
         const logModalTitle = document.getElementById('log-modal-title');
         const logContent = document.getElementById('log-content');
         const logContainer = logContent.parentElement;
         
+        logModalTitle.textContent = `Logs de ${name}`;
+        logContent.textContent = initialMessage ? `${initialMessage}\n\n` : '';
         logModal.style.display = 'flex';
-        logModalTitle.textContent = `Logs de ${name} (a conectar...)`;
-        logContent.textContent = 'A carregar histórico de logs...';
+        logContainer.scrollTop = logContainer.scrollHeight;
 
-        try {
-            const result = await fetchWithAuth(`/api/bots/logs/${name}`);
-            logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
-            logContainer.scrollTop = logContainer.scrollHeight;
-        } catch (error) {
-            logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`;
+        if (initialMessage) {
+             logContent.textContent += 'A iniciar conexão para logs em tempo real...\n';
+        } else {
+            logContent.textContent = 'A carregar histórico de logs...\n';
+            try {
+                const result = await fetchWithAuth(`/api/bots/logs/${name}`);
+                logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
+            } catch (error) {
+                logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}\n`;
+            }
         }
+        logContainer.scrollTop = logContainer.scrollHeight;
         
         if (currentLogSocket) currentLogSocket.close();
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -270,7 +272,7 @@
 
         currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; };
         currentLogSocket.onmessage = (event) => { logContent.textContent += event.data; logContainer.scrollTop = logContainer.scrollHeight; };
-        currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n'; };
+        currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET DE LOGS ---\n'; };
         currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
     }
 
@@ -342,17 +344,15 @@
         );
         if (!confirmed) return;
 
-        try {
-            const result = await fetchWithAuth(`/api/bots/reset-session/${botName}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scriptPath })
-            });
-            showNotification('Sucesso', result.message);
-            // Abre os logs automaticamente para o utilizador ver o novo QR Code
-            setTimeout(() => showLogs(botName), 500);
-        } catch (error) {
-            showNotification('Falha ao Limpar Sessão', `ERRO: ${error.message}`, 'error');
+        showLogs(botName, ``);
+
+        if (dashboardSocket && dashboardSocket.readyState === WebSocket.OPEN) {
+            dashboardSocket.send(JSON.stringify({
+                type: 'resetSession',
+                data: { name: botName, scriptPath }
+            }));
+        } else {
+            showNotification('Erro', 'A conexão com o painel não está ativa. Por favor, atualize a página.', 'error');
         }
     }
     
@@ -446,7 +446,7 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath })
             });
             showNotification('Sucesso', result.message);
-            showNotificationManager(name, scriptPath); // Recarrega o modal para remover o aviso
+            showNotificationManager(name, scriptPath);
         } catch (error) {
             showNotification('Falha ao Aplicar Correção', `ERRO: ${error.message}`, 'error');
         }
@@ -509,12 +509,44 @@
         const statusElement = document.getElementById('connection-status');
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
-        const socket = new WebSocket(wsUrl);
+        
+        dashboardSocket = new WebSocket(wsUrl);
 
-        socket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; };
-        socket.onmessage = (event) => { try { const message = JSON.parse(event.data); if (message.type === 'statusUpdate') { loadBots(message.data); } } catch (e) { console.error('Failed to parse WebSocket message:', e); } };
-        socket.onclose = () => { statusElement.textContent = 'Desconectado. Tentando reconectar...'; statusElement.style.color = 'var(--red)'; setTimeout(connectDashboardSocket, 3000); };
-        socket.onerror = (error) => { statusElement.textContent = 'Erro de Conexão'; statusElement.style.color = 'var(--red)'; console.error('WebSocket Error:', error); socket.close(); };
+        dashboardSocket.onopen = () => {
+            statusElement.textContent = 'Conectado';
+            statusElement.style.color = 'var(--green)';
+        };
+
+        dashboardSocket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'statusUpdate') {
+                    loadBots(message.data);
+                }
+                if (message.type === 'progress') {
+                    const logContent = document.getElementById('log-content');
+                    if (logContent && logContent.closest('.modal-overlay').style.display === 'flex') {
+                        logContent.textContent += message.message + '\n';
+                        logContent.parentElement.scrollTop = logContent.parentElement.scrollHeight;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to parse WebSocket message:', e);
+            }
+        };
+
+        dashboardSocket.onclose = () => {
+            statusElement.textContent = 'Desconectado. Tentando reconectar...';
+            statusElement.style.color = 'var(--red)';
+            setTimeout(connectDashboardSocket, 3000);
+        };
+
+        dashboardSocket.onerror = (error) => {
+            statusElement.textContent = 'Erro de Conexão';
+            statusElement.style.color = 'var(--red)';
+            console.error('WebSocket Error:', error);
+            dashboardSocket.close();
+        };
     }
 
     document.addEventListener('DOMContentLoaded', () => {

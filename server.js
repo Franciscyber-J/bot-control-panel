@@ -9,7 +9,7 @@ const { WebSocketServer } = require('ws');
 const cookieSession = require('cookie-session');
 const cookieParser = require('cookie-parser');
 const url = require('url');
-const nodemailer = require('nodemailer'); // Importa o nodemailer
+const nodemailer = require('nodemailer');
 
 const apiRouter = require('./routes/bots');
 
@@ -18,6 +18,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 10001;
+const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
 
 app.set('trust proxy', 1);
 
@@ -42,7 +43,7 @@ const checkAuth = (req, res, next) => {
     res.redirect('/');
 };
 
-app.use(express.json({ limit: '10mb' })); // Aumentado o limite para o .env
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -71,7 +72,6 @@ app.post('/api/login', (req, res) => {
 
 app.post('/api/forgot-password', async (req, res) => {
     const { ADMIN_USER, ADMIN_PASSWORD, EMAIL_USER, EMAIL_PASS } = process.env;
-
     if (!ADMIN_USER || !ADMIN_PASSWORD || !EMAIL_USER || !EMAIL_PASS) {
         return res.status(500).json({ error: 'Funcionalidade de recuperação não configurada no servidor.' });
     }
@@ -92,7 +92,6 @@ app.post('/api/forgot-password', async (req, res) => {
             <div style="font-family: sans-serif; padding: 20px; color: #333;">
                 <h2>Recuperação de Credenciais</h2>
                 <p>Olá, foi solicitada a recuperação das suas credenciais de acesso ao Painel de Controlo de Bots.</p>
-                <p>Os seus dados de acesso são:</p>
                 <ul>
                     <li><strong>Utilizador:</strong> ${ADMIN_USER}</li>
                     <li><strong>Palavra-passe:</strong> ${ADMIN_PASSWORD}</li>
@@ -109,17 +108,13 @@ app.post('/api/forgot-password', async (req, res) => {
         res.status(200).json({ message: 'As suas credenciais foram enviadas para o e-mail de recuperação.' });
     } catch (error) {
         console.error("Erro ao enviar e-mail de recuperação:", error);
-        res.status(500).json({ error: 'Falha ao enviar o e-mail de recuperação. Verifique as configurações do servidor.' });
+        res.status(500).json({ error: 'Falha ao enviar o e-mail de recuperação.' });
     }
 });
 
 app.post('/api/logout', (req, res) => {
     req.session = null;
     res.status(200).json({ message: 'Logout bem-sucedido' });
-});
-
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
 });
 
 app.use('/api', checkAuth, apiRouter);
@@ -130,7 +125,6 @@ const sshConfig = {
     password: process.env.SSH_PASSWORD,
     readyTimeout: 20000
 };
-const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
 const dashboardClients = new Set();
 
 async function getBotsStatus() {
@@ -145,14 +139,12 @@ async function getBotsStatus() {
         }
         return JSON.parse(result.stdout);
     } catch (error) {
-        console.error(`Falha ao buscar status dos bots. Detalhe: ${error.message}`);
+        console.error(`Falha ao buscar status dos bots: ${error.message}`);
         return [];
     } finally {
         if (ssh.connection) ssh.dispose();
     }
 }
-apiRouter.getBotsStatus = getBotsStatus;
-apiRouter.dashboardClients = dashboardClients;
 
 async function broadcastStatus() {
     if (dashboardClients.size === 0) return;
@@ -165,7 +157,6 @@ async function broadcastStatus() {
     });
 }
 setInterval(broadcastStatus, 5000);
-apiRouter.broadcastStatus = broadcastStatus;
 
 server.on('upgrade', (request, socket, head) => {
     sessionParser(request, {}, () => {
@@ -183,57 +174,140 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', (ws, request) => {
     const { pathname } = url.parse(request.url);
     
+    // Lógica para o Dashboard
     if (pathname === '/ws/dashboard') {
         dashboardClients.add(ws);
-        console.log('Cliente do dashboard conectado. Total:', dashboardClients.size);
-
         getBotsStatus().then(status => {
             ws.send(JSON.stringify({ type: 'statusUpdate', data: status }));
         });
 
+        ws.on('message', async (message) => {
+            try {
+                const parsedMessage = JSON.parse(message);
+                if (parsedMessage.type === 'resetSession') {
+                    await handleResetSession(ws, parsedMessage.data);
+                }
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Mensagem inválida.' }));
+            }
+        });
+
         ws.on('close', () => {
             dashboardClients.delete(ws);
-            console.log('Cliente do dashboard desconectado. Total:', dashboardClients.size);
         });
         return;
     }
 
+    // Lógica para os Logs
     const logMatch = pathname.match(/^\/ws\/logs\/(.+)$/);
     if (logMatch) {
         const botName = logMatch[1];
         if (!botName) {
-            ws.close(1008, 'Nome do bot não fornecido.');
-            return;
+            return ws.close(1008, 'Nome do bot não fornecido.');
         }
 
-        console.log(`Cliente WebSocket conectado para os logs de: ${botName}`);
         const ssh = new NodeSSH();
-
         ssh.connect(sshConfig)
             .then(() => {
                 ssh.execCommand(`${NVM_PREFIX}pm2 logs ${botName} --raw --lines 20`, {
                     onStdout: (chunk) => {
-                        if (ws.readyState === ws.OPEN) ws.send(chunk.toString('utf8'));
+                        if (ws.readyState === ws.OPEN) {
+                            ws.send(chunk.toString('utf8'));
+                        }
                     },
                     onStderr: (chunk) => {
-                        if (ws.readyState === ws.OPEN) ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
+                        if (ws.readyState === ws.OPEN) {
+                            ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
+                        }
                     }
                 });
             })
             .catch(err => {
-                console.error(`Erro na conexão SSH ou comando para logs de ${botName}:`, err);
-                if (ws.readyState === ws.OPEN) ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
+                if (ws.readyState === ws.OPEN) {
+                    ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
+                }
             });
 
         ws.on('close', () => {
-            console.log(`Cliente WebSocket desconectado para os logs de: ${botName}`);
-            if (ssh.connection) ssh.dispose();
+            if (ssh.connection) {
+                ssh.dispose();
+            }
         });
         return;
     }
 
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
+
+async function handleResetSession(ws, data) {
+    const { name, scriptPath } = data;
+    const sendProgress = (message) => {
+        if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ type: 'progress', message: `[PAINEL] ${message}` }));
+        }
+    };
+    
+    const ssh = new NodeSSH();
+    const botDirectory = path.dirname(scriptPath);
+
+    const waitForCondition = async (condition, timeout = 30000, interval = 2000) => {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeout) {
+            if (await condition()) {
+                return true;
+            }
+            await new Promise(resolve => setTimeout(resolve, interval));
+        }
+        return false;
+    };
+
+    try {
+        await ssh.connect(sshConfig);
+
+        sendProgress(`Iniciando limpeza de sessão para '${name}'...`);
+        sendProgress(`Aguarde, isto pode demorar um pouco.`);
+
+        sendProgress(`A parar o bot...`);
+        await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
+
+        sendProgress(`A verificar se o bot está parado...`);
+        const isStopped = await waitForCondition(async () => {
+            const result = await ssh.execCommand(`${NVM_PREFIX}pm2 describe ${name}`);
+            return result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"');
+        });
+        if (!isStopped) {
+            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
+        }
+        sendProgress(`Bot parado com sucesso.`);
+
+        sendProgress(`A apagar pastas de sessão...`);
+        const sessionPath = path.join(botDirectory, '.wwebjs_auth');
+        await ssh.execCommand(`rm -rf ${sessionPath}`);
+        
+        sendProgress(`A verificar se a pasta foi apagada...`);
+        const checkDeletion = await ssh.execCommand(`test -d ${sessionPath} && echo "exists" || echo "deleted"`);
+        if (checkDeletion.stdout.includes('exists')) {
+            throw new Error(`Não foi possível apagar a pasta de sessão: ${sessionPath}.`);
+        }
+        sendProgress(`Verificação concluída. Pasta apagada.`);
+
+        sendProgress(`A iniciar o bot novamente...`);
+        await ssh.execCommand(`${NVM_PREFIX}pm2 start ${name}`);
+
+        sendProgress(`\nPROCESSO CONCLUÍDO COM SUCESSO!`);
+        sendProgress(`O bot '${name}' foi reiniciado e irá gerar um novo QR Code.`);
+        sendProgress(`Por favor, observe os logs do bot abaixo para ler o QR Code.`);
+
+    } catch (error) {
+        sendProgress(`\nERRO: ${error.message}`);
+        sendProgress(`A tentar reiniciar o bot para o estado anterior...`);
+        await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(()=>{});
+    } finally {
+        if (ssh.connection) {
+            ssh.dispose();
+        }
+    }
+}
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
