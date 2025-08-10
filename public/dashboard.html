@@ -171,13 +171,13 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO ##########
 
     // --- Variáveis Globais ---
     let currentLogSocket = null;
     let currentBotForNotifications = null;
     let newBotEnvContent = null;
-    let dashboardSocket = null; // Tornar o socket do dashboard globalmente acessível
+    let dashboardSocket = null;
 
     // --- Funções de UI Genéricas ---
     function showNotification(title, message, type = 'info') {
@@ -195,8 +195,6 @@
             modal.style.display = 'flex';
             const btnYes = document.getElementById('confirm-btn-yes');
             const btnNo = document.getElementById('confirm-btn-no');
-            btnYes.onclick = null;
-            btnNo.onclick = null;
             btnYes.onclick = () => { modal.style.display = 'none'; resolve(true); };
             btnNo.onclick = () => { modal.style.display = 'none'; resolve(false); };
         });
@@ -375,43 +373,49 @@
         }
     }
 
+    // ### FUNÇÃO CORRIGIDA PARA USAR ATRIBUTOS DATA-* ###
     function renderNotificationList(notifications = [], notifierInjected) {
-            const container = document.getElementById('notification-list-container');
-            if (notifications.length === 0) {
-                container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
-            } else {
-                container.innerHTML = notifications.map(notif => {
-                    // Prepara os dados de forma segura para o HTML
-                    const safeName = notif.name.replace(/'/g, "\\'"); // Escapa aspas simples no nome
-                    const safeToken = notif.token;
-                    const safeChatId = notif.chatId;
-                    const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
-
-                    return `
-                    <div class="notification-item">
-                        <div>
-                            <strong>${notif.name}</strong><br>
-                            <small>Chat ID: ${safeChatId} | Token: **********</small>
-                        </div>
-                        <div class="notification-item-actions">
-                            <button class="action-btn-footer" onclick="testNotification('${safeName}', '${safeToken}', '${safeChatId}')" title="Enviar Teste"><i data-feather="send"></i> Testar</button>
-                            <button class="action-btn-footer" onclick='showEditNotificationModal(${notifDataForEdit})' title="Editar"><i data-feather="edit"></i> Editar</button>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-            
-            if (!notifierInjected && notifications.length > 0) {
-                container.innerHTML += `
-                    <div class="info-message warning">
-                        <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
-                        <button class="action-btn primary" onclick="injectNotifierCode()">
-                            <i data-feather="tool"></i>Aplicar Correção Automática
+        const container = document.getElementById('notification-list-container');
+        if (notifications.length === 0) {
+            container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+        } else {
+            container.innerHTML = notifications.map(notif => {
+                const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
+                return `
+                <div class="notification-item">
+                    <div>
+                        <strong>${notif.name}</strong><br>
+                        <small>Chat ID: ${notif.chatId} | Token: **********</small>
+                    </div>
+                    <div class="notification-item-actions">
+                        <button class="action-btn-footer test-notification-btn" 
+                                data-name="${notif.name.replace(/"/g, '&quot;')}" 
+                                data-token="${notif.token}" 
+                                data-chatid="${notif.chatId}" 
+                                title="Enviar Teste">
+                            <i data-feather="send"></i> Testar
                         </button>
-                    </div>`;
-            }
-            feather.replace();
+                        <button class="action-btn-footer edit-notification-btn" 
+                                data-notification='${notifDataForEdit}' 
+                                title="Editar">
+                            <i data-feather="edit"></i> Editar
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
         }
+        
+        if (!notifierInjected && notifications.length > 0) {
+            container.innerHTML += `
+                <div class="info-message warning">
+                    <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
+                    <button class="action-btn primary" onclick="injectNotifierCode()">
+                        <i data-feather="tool"></i>Aplicar Correção Automática
+                    </button>
+                </div>`;
+        }
+        feather.replace();
+    }
 
     function showEditNotificationModal(notification = null) {
         const modal = document.getElementById('edit-notification-modal');
@@ -431,27 +435,27 @@
         modal.style.display = 'flex';
     }
 
+    // ### FUNÇÃO DE TESTE CORRIGIDA PARA LER DADOS DO EVENTO ###
     async function testNotification(name, token, chatId) {
-            if (!token || !chatId) {
-                showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
-                return;
-            }
-
-            try {
-                const result = await fetchWithAuth('/api/bots/notifications/test', {
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ 
-                        token: token, 
-                        chatId: chatId, 
-                        message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${name}".` 
-                    })
-                });
-                showNotification('Sucesso', result.message);
-            } catch (error) {
-                showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
-            }
+        if (!token || !chatId) {
+            showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
+            return;
         }
+        try {
+            const result = await fetchWithAuth('/api/bots/notifications/test', {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    token: token, 
+                    chatId: chatId, 
+                    message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${name}".` 
+                })
+            });
+            showNotification('Sucesso', result.message);
+        } catch (error) {
+            showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
+        }
+    }
 
     async function injectNotifierCode() {
         if (!currentBotForNotifications) return;
@@ -480,14 +484,14 @@
         const scriptPath = bot.pm2_env.pm_exec_path;
 
         return `
-            <div class="bot-card">
+            <div class="bot-card" data-bot-name="${bot.name}" data-script-path="${scriptPath}">
                 <div class="card-header">
                     <div class="card-title-group">
                         <h2>${bot.name}</h2>
                         <div class="status-indicator ${statusClass}"><span>${statusText}</span></div>
                     </div>
                     <div class="card-header-actions">
-                        <button class="action-btn-icon danger" onclick="deleteBot('${bot.name}')" title="Excluir Bot">
+                        <button class="action-btn-icon danger delete-bot-btn" title="Excluir Bot">
                             <i data-feather="trash-2"></i>
                         </button>
                     </div>
@@ -498,16 +502,16 @@
                     <p class="data-field"><span class="label">REINICIALIZAÇÕES</span> <span>${bot.pm2_env.restart_time}</span></p>
                 </div>
                 <div class="card-actions">
-                    <button class="action-btn-card" onclick="manageBot('${bot.name}', 'start')" ${isOnline ? 'disabled' : ''}>Iniciar</button>
-                    <button class="action-btn-card" onclick="manageBot('${bot.name}', 'restart')" ${!isOnline ? 'disabled' : ''}>Reiniciar</button>
-                    <button class="action-btn-card stop" onclick="manageBot('${bot.name}', 'stop')" ${!isOnline ? 'disabled' : ''}>Parar</button>
+                    <button class="action-btn-card manage-bot-btn" data-action="start" ${isOnline ? 'disabled' : ''}>Iniciar</button>
+                    <button class="action-btn-card manage-bot-btn" data-action="restart" ${!isOnline ? 'disabled' : ''}>Reiniciar</button>
+                    <button class="action-btn-card stop manage-bot-btn" data-action="stop" ${!isOnline ? 'disabled' : ''}>Parar</button>
                 </div>
                 <div class="card-footer-actions">
-                    <button class="action-btn-footer" onclick="resetBotSession('${bot.name}', '${scriptPath}')" title="Adicionar novo número de WhatsApp"><i data-feather="zap"></i>Add Nº Novo</button>
-                    <button class="action-btn-footer" onclick="showNotificationManager('${bot.name}', '${scriptPath}')" title="Gerir Notificações do Telegram"><i data-feather="bell"></i>Notificações</button>
-                    <button class="action-btn-footer" onclick="uploadEnvFile('${bot.name}', '${scriptPath}')" title="Enviar Ficheiro .env"><i data-feather="upload-cloud"></i>Enviar .env</button>
-                    <button class="action-btn-footer" onclick="showLogs('${bot.name}')" title="Ver Logs"><i data-feather="terminal"></i>Logs</button>
-                    <button class="action-btn-footer" onclick="showUpdateModal('${bot.name}', '${scriptPath}')" title="Atualizar a partir do Git"><i data-feather="git-pull-request"></i>Atualizar</button>
+                    <button class="action-btn-footer reset-session-btn" title="Adicionar novo número de WhatsApp"><i data-feather="zap"></i>Add Nº Novo</button>
+                    <button class="action-btn-footer manage-notifications-btn" title="Gerir Notificações do Telegram"><i data-feather="bell"></i>Notificações</button>
+                    <button class="action-btn-footer upload-env-btn" title="Enviar Ficheiro .env"><i data-feather="upload-cloud"></i>Enviar .env</button>
+                    <button class="action-btn-footer show-logs-btn" title="Ver Logs"><i data-feather="terminal"></i>Logs</button>
+                    <button class="action-btn-footer update-source-btn" title="Atualizar a partir do Git"><i data-feather="git-pull-request"></i>Atualizar</button>
                 </div>
             </div>
         `;
@@ -523,7 +527,7 @@
         feather.replace();
     }
     
-    // --- WebSocket e Event Listeners ---
+    // --- WebSocket ---
     function connectDashboardSocket() {
         const statusElement = document.getElementById('connection-status');
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -531,17 +535,11 @@
         
         dashboardSocket = new WebSocket(wsUrl);
 
-        dashboardSocket.onopen = () => {
-            statusElement.textContent = 'Conectado';
-            statusElement.style.color = 'var(--green)';
-        };
-
+        dashboardSocket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; };
         dashboardSocket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                if (message.type === 'statusUpdate') {
-                    loadBots(message.data);
-                }
+                if (message.type === 'statusUpdate') loadBots(message.data);
                 if (message.type === 'progress') {
                     const logContent = document.getElementById('log-content');
                     if (logContent && logContent.closest('.modal-overlay').style.display === 'flex') {
@@ -549,17 +547,13 @@
                         logContent.parentElement.scrollTop = logContent.parentElement.scrollHeight;
                     }
                 }
-            } catch (e) {
-                console.error('Failed to parse WebSocket message:', e);
-            }
+            } catch (e) { console.error('Failed to parse WebSocket message:', e); }
         };
-
         dashboardSocket.onclose = () => {
             statusElement.textContent = 'Desconectado. Tentando reconectar...';
             statusElement.style.color = 'var(--red)';
             setTimeout(connectDashboardSocket, 3000);
         };
-
         dashboardSocket.onerror = (error) => {
             statusElement.textContent = 'Erro de Conexão';
             statusElement.style.color = 'var(--red)';
@@ -568,6 +562,7 @@
         };
     }
 
+    // --- Event Listeners ---
     document.addEventListener('DOMContentLoaded', () => {
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
@@ -575,7 +570,41 @@
         const envFileInputAdd = document.getElementById('bot-env-file-add');
         const envFileStatus = document.getElementById('env-file-status');
         const addBotSubmitBtn = document.getElementById('add-bot-submit-btn');
+        const botListContainer = document.getElementById('bot-list');
+        const notificationListContainer = document.getElementById('notification-list-container');
 
+        // Event Delegation para todos os botões dos cards
+        botListContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('button');
+            if (!button) return;
+            const card = button.closest('.bot-card');
+            const botName = card.dataset.botName;
+            const scriptPath = card.dataset.scriptPath;
+
+            if (button.classList.contains('manage-bot-btn')) manageBot(botName, button.dataset.action);
+            if (button.classList.contains('delete-bot-btn')) deleteBot(botName);
+            if (button.classList.contains('reset-session-btn')) resetBotSession(botName, scriptPath);
+            if (button.classList.contains('manage-notifications-btn')) showNotificationManager(botName, scriptPath);
+            if (button.classList.contains('upload-env-btn')) uploadEnvFile(botName, scriptPath);
+            if (button.classList.contains('show-logs-btn')) showLogs(botName);
+            if (button.classList.contains('update-source-btn')) showUpdateModal(botName, scriptPath);
+        });
+        
+        // Event Delegation para os botões do gestor de notificações
+        notificationListContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('button');
+            if (!button) return;
+            if (button.classList.contains('test-notification-btn')) {
+                const { name, token, chatid } = button.dataset;
+                testNotification(name, token, chatid);
+            }
+            if (button.classList.contains('edit-notification-btn')) {
+                const notificationData = JSON.parse(button.dataset.notification);
+                showEditNotificationModal(notificationData);
+            }
+        });
+
+        // Listeners para o modal de adicionar bot
         document.getElementById('add-bot-btn').addEventListener('click', () => {
             addBotForm.reset();
             newBotEnvContent = null;
@@ -585,9 +614,7 @@
             addBotModal.style.display = 'flex';
         });
 
-        uploadEnvBtnAdd.addEventListener('click', () => {
-            envFileInputAdd.click();
-        });
+        uploadEnvBtnAdd.addEventListener('click', () => envFileInputAdd.click());
 
         envFileInputAdd.addEventListener('change', (event) => {
             const file = event.target.files[0];
@@ -598,7 +625,6 @@
                 envFileStatus.style.color = 'var(--text-secondary)';
                 return;
             }
-
             const reader = new FileReader();
             reader.onload = (e) => {
                 newBotEnvContent = e.target.result;
@@ -619,7 +645,6 @@
             event.preventDefault();
             const gitUrl = document.getElementById('bot-git-url-add').value;
             const name = document.getElementById('bot-name-add').value;
-
             const updateModal = document.getElementById('update-modal');
             const updateTitle = document.getElementById('update-modal-title');
             const updateContent = document.getElementById('update-content');
@@ -635,26 +660,25 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gitUrl, name, envContent: newBotEnvContent })
                 });
-                
                 updateContent.textContent = result.message;
                 addBotForm.reset();
-
             } catch (error) {
                 updateContent.textContent = `ERRO AO ADICIONAR O BOT:\n\n${error.message}`;
             }
         });
         
+        // Listeners genéricos para modais e logout
         document.querySelectorAll('.close-modal-btn').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.modal-overlay'); if (modal.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } modal.style.display = 'none'; }); });
         window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
-        document.getElementById('logout-btn').addEventListener('click', async () => { const confirmed = await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?'); if (confirmed) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
+        document.getElementById('logout-btn').addEventListener('click', async () => { if (await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?')) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
         document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { event.preventDefault(); const notification = { id: document.getElementById('notification-id').value, name: document.getElementById('notification-name').value, token: document.getElementById('notification-token').value, chatId: document.getElementById('notification-chat-id').value }; try { const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) }); document.getElementById('edit-notification-modal').style.display = 'none'; showNotification('Sucesso', result.message); showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); } catch (error) { showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); } });
         document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
         
+        // Listener para visibilidade do token
         const toggleTokenBtn = document.getElementById('toggle-token-visibility');
         const tokenInput = document.getElementById('notification-token');
         const iconEye = toggleTokenBtn.querySelector('.icon-eye');
         const iconEyeOff = toggleTokenBtn.querySelector('.icon-eye-off');
-
         toggleTokenBtn.addEventListener('click', () => {
             const isPassword = tokenInput.type === 'password';
             tokenInput.type = isPassword ? 'text' : 'password';
