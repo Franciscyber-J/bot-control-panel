@@ -376,43 +376,43 @@
     }
 
     function renderNotificationList(notifications = [], notifierInjected) {
-        const container = document.getElementById('notification-list-container');
-        if (notifications.length === 0) {
-            container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
-        } else {
-            // ### INÍCIO DA CORREÇÃO ###
-            // A lógica foi alterada para passar os dados de forma segura, evitando conflitos de aspas.
-            container.innerHTML = notifications.map(notif => {
-                // Escapamos o objeto JSON para que possa ser passado como um único argumento de string
-                const notifData = JSON.stringify(notif).replace(/'/g, "&apos;");
+            const container = document.getElementById('notification-list-container');
+            if (notifications.length === 0) {
+                container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+            } else {
+                container.innerHTML = notifications.map(notif => {
+                    // Prepara os dados de forma segura para o HTML
+                    const safeName = notif.name.replace(/'/g, "\\'"); // Escapa aspas simples no nome
+                    const safeToken = notif.token;
+                    const safeChatId = notif.chatId;
+                    const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
 
-                return `
-                <div class="notification-item">
-                    <div>
-                        <strong>${notif.name}</strong><br>
-                        <small>Chat ID: ${notif.chatId} | Token: **********</small>
-                    </div>
-                    <div class="notification-item-actions">
-                        <button class="action-btn-footer" onclick='testNotification(${notifData})' title="Enviar Teste"><i data-feather="send"></i> Testar</button>
-                        <button class="action-btn-footer" onclick='showEditNotificationModal(${notifData})' title="Editar"><i data-feather="edit"></i> Editar</button>
-                    </div>
-                </div>`;
-            }).join('');
-            // ### FIM DA CORREÇÃO ###
+                    return `
+                    <div class="notification-item">
+                        <div>
+                            <strong>${notif.name}</strong><br>
+                            <small>Chat ID: ${safeChatId} | Token: **********</small>
+                        </div>
+                        <div class="notification-item-actions">
+                            <button class="action-btn-footer" onclick="testNotification('${safeName}', '${safeToken}', '${safeChatId}')" title="Enviar Teste"><i data-feather="send"></i> Testar</button>
+                            <button class="action-btn-footer" onclick='showEditNotificationModal(${notifDataForEdit})' title="Editar"><i data-feather="edit"></i> Editar</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            
+            if (!notifierInjected && notifications.length > 0) {
+                container.innerHTML += `
+                    <div class="info-message warning">
+                        <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
+                        <button class="action-btn primary" onclick="injectNotifierCode()">
+                            <i data-feather="tool"></i>Aplicar Correção Automática
+                        </button>
+                    </div>`;
+            }
+            feather.replace();
         }
-        
-        if (!notifierInjected && notifications.length > 0) {
-            container.innerHTML += `
-                <div class="info-message warning">
-                    <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
-                    <button class="action-btn primary" onclick="injectNotifierCode()">
-                        <i data-feather="tool"></i>Aplicar Correção Automática
-                    </button>
-                </div>`;
-        }
-        feather.replace();
-    }
-    
+
     function showEditNotificationModal(notification = null) {
         const modal = document.getElementById('edit-notification-modal');
         const form = document.getElementById('edit-notification-form');
@@ -431,23 +431,27 @@
         modal.style.display = 'flex';
     }
 
-    async function testNotification(notification) {
-        // ### INÍCIO DA CORREÇÃO ###
-        // Adiciona uma verificação para garantir que o objeto de notificação é válido
-        if (!notification || !notification.token || !notification.chatId) {
-            showNotification('Falha no Teste', 'ERRO: Os dados da notificação (token ou chat ID) não foram encontrados no cliente. Por favor, feche e abra o gestor de notificações e tente novamente.', 'error');
-            return;
+    async function testNotification(name, token, chatId) {
+            if (!token || !chatId) {
+                showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
+                return;
+            }
+
+            try {
+                const result = await fetchWithAuth('/api/bots/notifications/test', {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ 
+                        token: token, 
+                        chatId: chatId, 
+                        message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${name}".` 
+                    })
+                });
+                showNotification('Sucesso', result.message);
+            } catch (error) {
+                showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
+            }
         }
-        // ### FIM DA CORREÇÃO ###
-        try {
-            const result = await fetchWithAuth('/api/bots/notifications/test', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: notification.token, chatId: notification.chatId, message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${notification.name}".` })
-            });
-            showNotification('Sucesso', result.message);
-        } catch (error) {
-            showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
-        }
-    }
 
     async function injectNotifierCode() {
         if (!currentBotForNotifications) return;
