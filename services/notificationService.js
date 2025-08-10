@@ -187,13 +187,15 @@ async function injectNotifier(ssh, scriptPath) {
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
-    // 1. Garante que o ficheiro notifier.js existe e que as dependências estão instaladas
+    // Garante que as dependências para o notificador estejam sempre instaladas no bot.
+    await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api dotenv`);
+
+    // 1. Garante que o ficheiro notifier.js existe
     const checkNotifierFile = await ssh.execCommand(`test -f ${notifierPath} && echo "exists"`);
     if (checkNotifierFile.code !== 0) {
         const notifierContent = getNotifierContent();
         const base64Content = Buffer.from(notifierContent).toString('base64');
         await ssh.execCommand(`echo ${base64Content} | base64 --decode > ${notifierPath}`);
-        await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api dotenv`);
     }
 
     // 2. Lê o conteúdo do script principal para fazer a migração
