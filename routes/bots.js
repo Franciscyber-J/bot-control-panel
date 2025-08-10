@@ -271,24 +271,22 @@ router.post('/bots/notifications/:name', async (req, res) => {
     }
 });
 
-// ### INÍCIO DA CORREÇÃO ###
 router.post('/bots/notifications/test', async (req, res) => {
-    // Corrigido para ler 'token' e 'chatId' diretamente do corpo da requisição
     const { token, chatId, message } = req.body; 
 
     if (!token || !chatId) {
         // Mensagem de erro mais específica para debugging
-        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
+        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor. Verifique a chamada no frontend.' });
     }
     
     try {
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
     } catch (error) {
+        // Retorna a mensagem de erro real da API do Telegram, se disponível
         res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
-// ### FIM DA CORREÇÃO ###
 
 router.post('/bots/inject-notifier/:name', async (req, res) => {
     const { name } = req.params;

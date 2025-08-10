@@ -380,17 +380,25 @@
         if (notifications.length === 0) {
             container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
         } else {
-            container.innerHTML = notifications.map(notif => `
+            // ### INÍCIO DA CORREÇÃO ###
+            // A lógica foi alterada para passar os dados de forma segura, evitando conflitos de aspas.
+            container.innerHTML = notifications.map(notif => {
+                // Escapamos o objeto JSON para que possa ser passado como um único argumento de string
+                const notifData = JSON.stringify(notif).replace(/'/g, "&apos;");
+
+                return `
                 <div class="notification-item">
                     <div>
                         <strong>${notif.name}</strong><br>
                         <small>Chat ID: ${notif.chatId} | Token: **********</small>
                     </div>
                     <div class="notification-item-actions">
-                        <button class="action-btn-footer" onclick='testNotification(${JSON.stringify(notif)})' title="Enviar Teste"><i data-feather="send"></i> Testar</button>
-                        <button class="action-btn-footer" onclick='showEditNotificationModal(${JSON.stringify(notif)})' title="Editar"><i data-feather="edit"></i> Editar</button>
+                        <button class="action-btn-footer" onclick='testNotification(${notifData})' title="Enviar Teste"><i data-feather="send"></i> Testar</button>
+                        <button class="action-btn-footer" onclick='showEditNotificationModal(${notifData})' title="Editar"><i data-feather="edit"></i> Editar</button>
                     </div>
-                </div>`).join('');
+                </div>`;
+            }).join('');
+            // ### FIM DA CORREÇÃO ###
         }
         
         if (!notifierInjected && notifications.length > 0) {
@@ -404,7 +412,7 @@
         }
         feather.replace();
     }
-
+    
     function showEditNotificationModal(notification = null) {
         const modal = document.getElementById('edit-notification-modal');
         const form = document.getElementById('edit-notification-form');
