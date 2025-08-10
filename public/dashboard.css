@@ -111,7 +111,7 @@ body::before {
 
 .bot-list-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); /* Aumentado para garantir espaço */
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); /* Aumentado para garantir espaço */
     gap: 1.5rem;
 }
 
@@ -310,15 +310,15 @@ body::before {
     margin-bottom: 0;
 }
 .info-message.warning button {
-    display: inline-flex; /* Usa flex para alinhar ícone e texto */
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     width: auto;
     margin-top: 1rem;
-    padding: 0.7rem 1.2rem; /* Mesmo padding do .action-btn */
+    padding: 0.7rem 1.2rem;
 }
 .info-message.warning button i {
-    width: 16px; /* Ajusta o tamanho do ícone */
+    width: 16px;
     height: 16px;
     margin-right: 0.5rem;
 }
@@ -329,7 +329,7 @@ body::before {
     align-items: center;
 }
 .input-with-icon input {
-    padding-right: 3rem; /* Espaço para o ícone */
+    padding-right: 3rem;
 }
 .input-icon-toggle {
     position: absolute;
