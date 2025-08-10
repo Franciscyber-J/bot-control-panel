@@ -391,7 +391,7 @@
                         <button class="action-btn-footer test-notification-btn" 
                                 data-name="${notif.name.replace(/"/g, '&quot;')}" 
                                 data-token="${notif.token}" 
-                                data-chatid="${notif.chatId}" 
+                                data-chat-id="${notif.chatId}" 
                                 title="Enviar Teste">
                             <i data-feather="send"></i> Testar
                         </button>
@@ -435,7 +435,6 @@
         modal.style.display = 'flex';
     }
 
-    // ### FUNÇÃO DE TESTE CORRIGIDA PARA LER DADOS DO EVENTO ###
     async function testNotification(name, token, chatId) {
         if (!token || !chatId) {
             showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
@@ -595,8 +594,9 @@
             const button = event.target.closest('button');
             if (!button) return;
             if (button.classList.contains('test-notification-btn')) {
-                const { name, token, chatid } = button.dataset;
-                testNotification(name, token, chatid);
+                // CORREÇÃO: Usar 'chatId' (camelCase) que o dataset gera a partir de 'data-chat-id'
+                const { name, token, chatId } = button.dataset;
+                testNotification(name, token, chatId);
             }
             if (button.classList.contains('edit-notification-btn')) {
                 const notificationData = JSON.parse(button.dataset.notification);

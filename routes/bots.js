@@ -1,4 +1,4 @@
-// ARQUIVO: routes/bots.js (COMPLETO E COM A CORREÇÃO FINAL NO TESTE)
+// ARQUIVO: routes/bots.js (COMPLETO E COM LOGS ADICIONADOS)
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -271,19 +271,30 @@ router.post('/bots/notifications/:name', async (req, res) => {
     }
 });
 
+// ROTA COM LOGS ADICIONADOS
 router.post('/bots/notifications/test', async (req, res) => {
-    const { token, chatId, message } = req.body; 
+    // Adicionando logs detalhados para depuração
+    console.log('--- [INÍCIO TESTE DE NOTIFICAÇÃO] ---');
+    console.log(`[${new Date().toISOString()}] Recebida requisição POST para /api/bots/notifications/test`);
+    console.log('Corpo da Requisição Recebido:', JSON.stringify(req.body, null, 2));
+
+    const { token, chatId, message } = req.body;
 
     if (!token || !chatId) {
-        // Mensagem de erro mais específica para debugging
+        console.error(`[FALHA NA VALIDAÇÃO] Token ou Chat ID em falta. Token: '${token}', ChatID: '${chatId}'`);
+        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM ERRO] ---');
         return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor. Verifique a chamada no frontend.' });
     }
-    
+
     try {
+        console.log(`[VALIDAÇÃO OK] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
+        console.log(`[SUCESSO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
+        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM SUCESSO] ---');
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
     } catch (error) {
-        // Retorna a mensagem de erro real da API do Telegram, se disponível
+        console.error(`[ERRO NO ENVIO] Falha ao enviar mensagem para o Chat ID ${chatId}. Erro: ${error.message}`);
+        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM ERRO] ---');
         res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
