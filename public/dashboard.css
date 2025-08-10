@@ -340,3 +340,9 @@ body::before {
 .input-icon-toggle:hover {
     color: var(--text-primary);
 }
+
+.file-status {
+    font-size: 0.85rem;
+    margin-left: 1rem;
+    color: var(--text-secondary);
+}

@@ -1,3 +1,4 @@
+/* ARQUIVO: public/login.css (COMPLETO E CORRIGIDO) */
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap');
 
 :root {
@@ -9,6 +10,7 @@
     --accent-color: #58A6FF;
     --accent-hover: #79B8FF;
     --error-color: #F85149;
+    --success-color: #28a745;
     --font-family: 'Exo 2', sans-serif;
 }
 
@@ -185,12 +187,25 @@ body {
     background-color: var(--accent-hover);
 }
 
-.error-message {
-    color: var(--error-color);
+.message-area {
     text-align: center;
     margin-top: 1rem;
-    height: 1em;
+    height: 1.2em;
     font-size: 0.9rem;
+    font-weight: bold;
+    transition: color 0.3s;
+}
+
+.message-area.error {
+    color: var(--error-color);
+}
+
+.message-area.success {
+    color: var(--success-color);
+}
+
+.message-area.info {
+    color: var(--secondary-text);
 }
 
 .login-branding {
@@ -213,4 +228,15 @@ body {
     font-size: 1.2rem;
     font-weight: 300;
     letter-spacing: 2px;
+}
+
+.forgot-password {
+    color: var(--secondary-text);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.forgot-password:hover {
+    color: var(--accent-color);
+    text-decoration: underline;
 }

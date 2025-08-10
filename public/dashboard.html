@@ -33,17 +33,26 @@
         <div class="modal-content">
             <h2>Adicionar Novo Bot a partir do GitHub</h2>
             <form id="add-bot-form">
-                <p class="modal-description">O painel irá clonar o repositório, instalar as dependências e iniciar o bot automaticamente.</p>
+                <p class="modal-description">O painel irá clonar o repositório, enviar o seu ficheiro .env, instalar as dependências e iniciar o bot automaticamente.</p>
                 <div class="form-group">
-                    <label for="bot-git-url-add">URL do Repositório Git (HTTPS)</label>
+                    <label for="bot-name-add">1. Dê um nome ao processo do bot</label>
+                    <input type="text" id="bot-name-add" placeholder="ex: meu-novo-bot" required>
+                </div>
+                <div class="form-group">
+                    <label for="bot-git-url-add">2. Insira a URL do Repositório Git (HTTPS)</label>
                     <input type="url" id="bot-git-url-add" placeholder="https://github.com/usuario/meu-bot.git" required>
                 </div>
                 <div class="form-group">
-                    <label for="bot-name-add">Nome do Processo (ex: meu-novo-bot)</label>
-                    <input type="text" id="bot-name-add" required>
+                    <label>3. Anexe o ficheiro .env (Obrigatório)</label>
+                    <button type="button" class="action-btn" id="upload-env-btn-add">
+                        <i data-feather="upload-cloud" style="width: 16px; margin-right: 0.5rem;"></i>
+                        <span>Selecionar Ficheiro .env</span>
+                    </button>
+                    <input type="file" id="bot-env-file-add" accept=".env" style="display: none;">
+                    <span id="env-file-status" class="file-status">Nenhum ficheiro selecionado.</span>
                 </div>
                 <div class="modal-actions">
-                    <button type="submit" class="action-btn primary">Adicionar e Iniciar</button>
+                    <button type="submit" id="add-bot-submit-btn" class="action-btn primary" disabled>Adicionar e Iniciar</button>
                     <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
                 </div>
             </form>
@@ -117,8 +126,7 @@
     <div id="notification-manager-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2 id="notification-manager-title">Gerir Notificações</h2>
-            <div id="notification-list-container" class="form-group">
-                </div>
+            <div id="notification-list-container" class="form-group"></div>
             <div class="modal-actions">
                 <button type="button" class="action-btn primary" id="add-new-notification-btn">Adicionar Nova Notificação</button>
                 <button type="button" class="action-btn close-modal-btn">Fechar</button>
@@ -168,6 +176,7 @@
     // --- Variáveis Globais ---
     let currentLogSocket = null;
     let currentBotForNotifications = null;
+    let newBotEnvContent = null; // Variável para guardar o conteúdo do .env ao adicionar um novo bot
 
     // --- Funções de UI Genéricas ---
     function showNotification(title, message, type = 'info') {
@@ -511,14 +520,49 @@
     document.addEventListener('DOMContentLoaded', () => {
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
+        const uploadEnvBtnAdd = document.getElementById('upload-env-btn-add');
+        const envFileInputAdd = document.getElementById('bot-env-file-add');
+        const envFileStatus = document.getElementById('env-file-status');
+        const addBotSubmitBtn = document.getElementById('add-bot-submit-btn');
 
         document.getElementById('add-bot-btn').addEventListener('click', () => {
             addBotForm.reset();
+            newBotEnvContent = null;
+            addBotSubmitBtn.disabled = true;
+            envFileStatus.textContent = 'Nenhum ficheiro selecionado.';
+            envFileStatus.style.color = 'var(--text-secondary)';
             addBotModal.style.display = 'flex';
         });
 
-        document.querySelectorAll('.close-modal-btn').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.modal-overlay'); if (modal.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } modal.style.display = 'none'; }); });
-        window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
+        uploadEnvBtnAdd.addEventListener('click', () => {
+            envFileInputAdd.click();
+        });
+
+        envFileInputAdd.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                newBotEnvContent = null;
+                addBotSubmitBtn.disabled = true;
+                envFileStatus.textContent = 'Nenhum ficheiro selecionado.';
+                envFileStatus.style.color = 'var(--text-secondary)';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                newBotEnvContent = e.target.result;
+                envFileStatus.textContent = `Ficheiro "${file.name}" carregado.`;
+                envFileStatus.style.color = 'var(--green)';
+                addBotSubmitBtn.disabled = false;
+            };
+            reader.onerror = () => {
+                newBotEnvContent = null;
+                addBotSubmitBtn.disabled = true;
+                envFileStatus.textContent = 'Erro ao ler o ficheiro.';
+                envFileStatus.style.color = 'var(--red)';
+            };
+            reader.readAsText(file);
+        });
         
         addBotForm.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -538,7 +582,7 @@
                 const result = await fetchWithAuth('/api/bots/add-from-git', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ gitUrl, name })
+                    body: JSON.stringify({ gitUrl, name, envContent: newBotEnvContent })
                 });
                 
                 updateContent.textContent = result.message;
@@ -548,7 +592,9 @@
                 updateContent.textContent = `ERRO AO ADICIONAR O BOT:\n\n${error.message}`;
             }
         });
-
+        
+        document.querySelectorAll('.close-modal-btn').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.modal-overlay'); if (modal.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } modal.style.display = 'none'; }); });
+        window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
         document.getElementById('logout-btn').addEventListener('click', async () => { const confirmed = await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?'); if (confirmed) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
         document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { event.preventDefault(); const notification = { id: document.getElementById('notification-id').value, name: document.getElementById('notification-name').value, token: document.getElementById('notification-token').value, chatId: document.getElementById('notification-chat-id').value }; try { const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) }); document.getElementById('edit-notification-modal').style.display = 'none'; showNotification('Sucesso', result.message); showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); } catch (error) { showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); } });
         document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });

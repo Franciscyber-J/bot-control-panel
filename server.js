@@ -9,8 +9,9 @@ const { WebSocketServer } = require('ws');
 const cookieSession = require('cookie-session');
 const cookieParser = require('cookie-parser');
 const url = require('url');
+const nodemailer = require('nodemailer'); // Importa o nodemailer
 
-const apiRouter = require('./routes/bots'); // Importa as rotas refatoradas
+const apiRouter = require('./routes/bots');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,7 +32,6 @@ const sessionParser = cookieSession({
 app.use(sessionParser);
 app.use(cookieParser());
 
-// Middleware de autenticação (aplicado agora dentro das rotas)
 const checkAuth = (req, res, next) => {
     if (req.session && req.session.isAuthenticated) {
         return next();
@@ -42,7 +42,7 @@ const checkAuth = (req, res, next) => {
     res.redirect('/');
 };
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' })); // Aumentado o limite para o .env
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -69,6 +69,50 @@ app.post('/api/login', (req, res) => {
     res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
+app.post('/api/forgot-password', async (req, res) => {
+    const { ADMIN_USER, ADMIN_PASSWORD, EMAIL_USER, EMAIL_PASS } = process.env;
+
+    if (!ADMIN_USER || !ADMIN_PASSWORD || !EMAIL_USER || !EMAIL_PASS) {
+        return res.status(500).json({ error: 'Funcionalidade de recuperação não configurada no servidor.' });
+    }
+
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: EMAIL_USER,
+            pass: EMAIL_PASS,
+        },
+    });
+
+    const mailOptions = {
+        from: `"Painel de Controlo de Bots" <${EMAIL_USER}>`,
+        to: 'francisjuniocosta@gmail.com',
+        subject: 'Recuperação de Credenciais - Painel de Controlo de Bots',
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                <h2>Recuperação de Credenciais</h2>
+                <p>Olá, foi solicitada a recuperação das suas credenciais de acesso ao Painel de Controlo de Bots.</p>
+                <p>Os seus dados de acesso são:</p>
+                <ul>
+                    <li><strong>Utilizador:</strong> ${ADMIN_USER}</li>
+                    <li><strong>Palavra-passe:</strong> ${ADMIN_PASSWORD}</li>
+                </ul>
+                <p>Recomenda-se que apague este e-mail após guardar as credenciais em local seguro.</p>
+                <hr>
+                <p style="font-size: 0.8em; color: #888;">Se não solicitou esta recuperação, por favor ignore este e-mail.</p>
+            </div>
+        `,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: 'As suas credenciais foram enviadas para o e-mail de recuperação.' });
+    } catch (error) {
+        console.error("Erro ao enviar e-mail de recuperação:", error);
+        res.status(500).json({ error: 'Falha ao enviar o e-mail de recuperação. Verifique as configurações do servidor.' });
+    }
+});
+
 app.post('/api/logout', (req, res) => {
     req.session = null;
     res.status(200).json({ message: 'Logout bem-sucedido' });
@@ -78,12 +122,8 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
-// Usa o router da API com o middleware de autenticação
 app.use('/api', checkAuth, apiRouter);
 
-
-// --- Lógica do WebSocket (movida para dentro do router para acesso a serviços) ---
-// Para simplificar, mantemos o WebSocket aqui, mas passamos a função `getBotsStatus` para o router.
 const sshConfig = {
     host: process.env.SSH_HOST,
     username: process.env.SSH_USER,
@@ -111,10 +151,8 @@ async function getBotsStatus() {
         if (ssh.connection) ssh.dispose();
     }
 }
-// Passa a função para as rotas, se necessário, ou a mantém aqui para o broadcast
 apiRouter.getBotsStatus = getBotsStatus;
 apiRouter.dashboardClients = dashboardClients;
-
 
 async function broadcastStatus() {
     if (dashboardClients.size === 0) return;
@@ -127,11 +165,8 @@ async function broadcastStatus() {
     });
 }
 setInterval(broadcastStatus, 5000);
-// Exporta a função para que as rotas possam chamar um broadcast após uma ação
 apiRouter.broadcastStatus = broadcastStatus;
 
-
-// --- Configuração do Upgrade do Servidor para WebSocket ---
 server.on('upgrade', (request, socket, head) => {
     sessionParser(request, {}, () => {
         if (!request.session || !request.session.isAuthenticated) {

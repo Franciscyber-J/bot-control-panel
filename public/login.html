@@ -38,9 +38,10 @@
                         <span class="checkmark"></span>
                         Manter sessão iniciada
                     </label>
+                    <a href="#" id="forgot-password-link" class="forgot-password">Esqueci meu login ou senha</a>
                 </div>
                 <button type="submit" class="login-button">Conectar</button>
-                <div id="error-message" class="error-message"></div>
+                <div id="message-area" class="message-area"></div>
             </form>
         </div>
         <div class="login-branding">
@@ -57,10 +58,11 @@
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const rememberMeInput = document.getElementById('remember-me');
-        const errorMessageDiv = document.getElementById('error-message');
+        const messageArea = document.getElementById('message-area');
         const togglePassword = document.querySelector('.toggle-password');
         const iconEye = document.querySelector('.icon-eye');
         const iconEyeOff = document.querySelector('.icon-eye-off');
+        const forgotPasswordLink = document.getElementById('forgot-password-link');
         
         document.addEventListener('DOMContentLoaded', () => {
             if (localStorage.getItem('rememberMe') === 'true') {
@@ -78,16 +80,13 @@
         });
 
         form.addEventListener('submit', async (event) => {
-            console.log('Evento de submissão do formulário foi acionado.');
             event.preventDefault();
-            console.log('Comportamento padrão do formulário foi prevenido (preventDefault chamado).');
             
-            errorMessageDiv.textContent = '';
+            messageArea.textContent = '';
+            messageArea.className = 'message-area';
             
             const username = usernameInput.value;
             const password = passwordInput.value;
-
-            console.log('A enviar pedido de login para /api/login com o utilizador:', username);
 
             try {
                 const response = await fetch('/api/login', {
@@ -96,15 +95,10 @@
                     body: JSON.stringify({ username, password })
                 });
 
-                console.log('Resposta recebida do servidor com status:', response.status);
-
                 if (!response.ok) {
                     const errorData = await response.json();
-                    console.error('Erro na resposta do servidor:', errorData);
                     throw new Error(errorData.error || `Erro ${response.status}`);
                 }
-                
-                console.log('Login bem-sucedido. A processar e a redirecionar...');
                 
                 if (rememberMeInput.checked) {
                     localStorage.setItem('rememberMe', 'true');
@@ -119,8 +113,35 @@
                 window.location.href = '/dashboard';
 
             } catch (error) {
-                console.error('Ocorreu um erro no bloco try/catch do formulário:', error);
-                errorMessageDiv.textContent = error.message;
+                messageArea.textContent = error.message;
+                messageArea.classList.add('error');
+            }
+        });
+
+        forgotPasswordLink.addEventListener('click', async (event) => {
+            event.preventDefault();
+            messageArea.textContent = 'A enviar pedido de recuperação...';
+            messageArea.className = 'message-area info';
+
+            try {
+                const response = await fetch('/api/forgot-password', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `Erro ${response.status}`);
+                }
+
+                messageArea.textContent = data.message;
+                messageArea.classList.remove('info');
+                messageArea.classList.add('success');
+
+            } catch (error) {
+                messageArea.textContent = error.message;
+                messageArea.classList.remove('info');
+                messageArea.classList.add('error');
             }
         });
     </script>

@@ -20,9 +20,9 @@ const BASE_BOT_PATH = process.env.BASE_BOT_PATH || '/root'; // Define um caminho
 // #################### ROTAS DE GESTÃO DE BOTS ####################
 
 router.post('/bots/add-from-git', async (req, res) => {
-    const { gitUrl, name } = req.body;
-    if (!gitUrl || !name) {
-        return res.status(400).json({ error: 'URL do Git e Nome do Bot são obrigatórios.' });
+    const { gitUrl, name, envContent } = req.body;
+    if (!gitUrl || !name || !envContent) {
+        return res.status(400).json({ error: 'URL do Git, Nome do Bot e Ficheiro .env são obrigatórios.' });
     }
 
     const botDirectory = path.join(BASE_BOT_PATH, name);
@@ -33,7 +33,7 @@ router.post('/bots/add-from-git', async (req, res) => {
 
         let outputLog = `Iniciando deploy do novo bot '${name}' a partir de ${gitUrl}...\n\n`;
 
-        // 1. Clonar o repositório
+        // Passo 1: Clonar o repositório
         outputLog += `> Clonando repositório para ${botDirectory}...\n`;
         const cloneResult = await ssh.execCommand(`git clone ${gitUrl} ${botDirectory}`);
         if (cloneResult.code !== 0) {
@@ -41,7 +41,17 @@ router.post('/bots/add-from-git', async (req, res) => {
         }
         outputLog += cloneResult.stdout + '\n\n';
 
-        // 2. Instalar dependências
+        // Passo 2: Escrever o ficheiro .env
+        outputLog += `> Escrevendo ficheiro .env no servidor...\n`;
+        const envPath = path.join(botDirectory, '.env');
+        const base64Content = Buffer.from(envContent).toString('base64');
+        const writeResult = await ssh.execCommand(`echo ${base64Content} | base64 --decode > ${envPath}`);
+        if (writeResult.code !== 0) {
+            throw new Error(`Falha ao escrever o ficheiro .env: ${writeResult.stderr}`);
+        }
+        outputLog += `Ficheiro .env enviado com sucesso.\n\n`;
+
+        // Passo 3: Instalar dependências
         outputLog += `> Instalando dependências com npm...\n`;
         const npmResult = await ssh.execCommand(`${NVM_PREFIX}npm install --prefix ${botDirectory}`);
         if (npmResult.code !== 0) {
@@ -49,7 +59,7 @@ router.post('/bots/add-from-git', async (req, res) => {
         }
         outputLog += npmResult.stdout + '\n\n';
 
-        // 3. Encontrar o script principal no package.json
+        // Passo 4: Encontrar o script principal no package.json
         outputLog += `> Lendo package.json para encontrar o script principal...\n`;
         const packageJsonPath = path.join(botDirectory, 'package.json');
         const catResult = await ssh.execCommand(`cat ${packageJsonPath}`);
@@ -67,7 +77,7 @@ router.post('/bots/add-from-git', async (req, res) => {
         const scriptPath = path.join(botDirectory, mainScript);
         outputLog += `> Script principal encontrado: ${scriptPath}\n\n`;
 
-        // 4. Iniciar o bot com PM2
+        // Passo 5: Iniciar o bot com PM2
         outputLog += `> Iniciando o bot com PM2...\n`;
         const pm2Result = await ssh.execCommand(`${NVM_PREFIX}pm2 start ${scriptPath} --name ${name}`);
         if (pm2Result.code !== 0) {
@@ -237,7 +247,6 @@ router.post('/bots/update/:name', async (req, res) => {
     }
 });
 
-
 // #################### ROTAS DE NOTIFICAÇÕES ####################
 
 router.get('/bots/notifications/:name', async (req, res) => {
@@ -358,7 +367,6 @@ router.post('/bots/inject-notifier/:name', async (req, res) => {
     }
 });
 
-
 // #################### ROTA PARA LIMPAR SESSÃO DO WHATSAPP ####################
 
 router.post('/bots/reset-session/:name', async (req, res) => {
@@ -374,28 +382,22 @@ router.post('/bots/reset-session/:name', async (req, res) => {
     try {
         await ssh.connect(sshConfig);
         
-        // 1. Para o bot para libertar os ficheiros de sessão
         await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
 
-        // 2. Apaga as pastas de sessão mais comuns de forma segura
-        // O comando '|| true' garante que, se uma pasta não existir, o script não falhe.
         await ssh.execCommand(`rm -rf ${path.join(botDirectory, '.wwebjs_auth')} || true`);
         await ssh.execCommand(`rm -rf ${path.join(botDirectory, 'session')} || true`);
         await ssh.execCommand(`rm -f ${path.join(botDirectory, 'session.json')} || true`);
 
-        // 3. Reinicia o bot. O pm2 irá iniciá-lo novamente.
         await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`);
         
         res.json({ message: `Sessão do bot '${name}' limpa com sucesso. O bot foi reiniciado e irá gerar um novo QR Code.` });
         
     } catch (error) {
-        // Tenta reiniciar o bot mesmo em caso de erro para não o deixar parado
         await ssh.execCommand(`${NVM_PREFIX}pm2 restart ${name}`).catch(() => {});
         res.status(500).json({ error: `Falha ao limpar a sessão. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
     }
 });
-
 
 module.exports = router;
