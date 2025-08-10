@@ -74,7 +74,6 @@ function parseNotifications(envContent) {
     return Object.values(notifications).filter(n => n.id && n.name && n.token && n.chatId);
 }
 
-
 /**
  * Atualiza ou adiciona uma notificação. Esta função sempre escreve no NOVO FORMATO,
  * migrando automaticamente o .env se ele estava em um formato legado.
@@ -180,13 +179,15 @@ module.exports = { sendNotification };
 }
 
 /**
- * Garante que o ficheiro do notificador e a sua injeção no bot principal existem.
+ * Garante que o ficheiro do notificador e a sua injeção no bot principal existem,
+ * e desativa o código legado de notificação.
  */
 async function injectNotifier(ssh, scriptPath) {
     const botDirectory = path.dirname(scriptPath);
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
+    // 1. Garante que o ficheiro notifier.js existe e que as dependências estão instaladas
     const checkNotifierFile = await ssh.execCommand(`test -f ${notifierPath} && echo "exists"`);
     if (checkNotifierFile.code !== 0) {
         const notifierContent = getNotifierContent();
@@ -195,13 +196,37 @@ async function injectNotifier(ssh, scriptPath) {
         await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api dotenv`);
     }
 
+    // 2. Lê o conteúdo do script principal para fazer a migração
     const mainScriptContentResult = await ssh.execCommand(`cat ${mainScriptPath}`);
-    const mainScriptContent = mainScriptContentResult.stdout;
-    const injectionLine = `const { sendNotification } = require('./telegramNotifier.js');`;
+    let mainScriptContent = mainScriptContentResult.stdout;
+    let modified = false;
 
+    // 3. Comenta o require antigo do telegram-bot-api se existir
+    const requireRegex = /^(const\s+.*\s*=\s*)?require\(['"]node-telegram-bot-api['"]\);?/gm;
+    if (mainScriptContent.match(requireRegex)) {
+        mainScriptContent = mainScriptContent.replace(requireRegex, '// $&');
+        modified = true;
+    }
+
+    // 4. Comenta a inicialização antiga do bot
+    const newBotRegex = /new\s+TelegramBot\([^)]+\)/g;
+    if (mainScriptContent.match(newBotRegex)) {
+        mainScriptContent = mainScriptContent.replace(newBotRegex, '// $&');
+        modified = true;
+    }
+
+    // 5. Adiciona a nova linha de require no topo, se não existir
+    const injectionLine = `const { sendNotification } = require('./telegramNotifier.js');`;
     if (!mainScriptContent.includes(injectionLine)) {
-        const newContent = injectionLine + '\n' + mainScriptContent;
-        const base64Content = Buffer.from(newContent).toString('base64');
+        mainScriptContent = injectionLine + '\n' + mainScriptContent;
+        modified = true;
+    }
+
+    // 6. Se houve alguma modificação, escreve o novo conteúdo no ficheiro
+    if (modified) {
+        // Faz um backup do script principal antes de sobrescrever
+        await ssh.execCommand(`cp ${mainScriptPath} ${mainScriptPath}.bak`).catch(() => console.log('Backup do script principal não pôde ser criado.'));
+        const base64Content = Buffer.from(mainScriptContent).toString('base64');
         await ssh.execCommand(`echo ${base64Content} | base64 --decode > ${mainScriptPath}`);
     }
 }

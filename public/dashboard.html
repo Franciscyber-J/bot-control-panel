@@ -21,39 +21,398 @@
             </div>
         </header>
 
-        <main id="bot-list" class="bot-list-grid"></main>
+        <main id="bot-list" class="bot-list-grid">
+            </main>
 
         <footer class="panel-footer">
             <p>Status da Conexão: <span id="connection-status">Conectando...</span></p>
         </footer>
     </div>
 
-    <div id="add-bot-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2>Adicionar Novo Bot</h2><form id="add-bot-form"><div class="form-group"><label for="bot-name">Nome do Processo (ex: meu-bot)</label><input type="text" id="bot-name" required></div><div class="form-group"><label for="bot-script">Caminho do Script no Servidor (ex: /root/meu-bot/index.js)</label><input type="text" id="bot-script" required></div><div class="modal-actions"><button type="submit" class="action-btn primary">Adicionar e Iniciar</button><button type="button" class="action-btn close-modal-btn danger">Cancelar</button></div></form></div></div>
-    <div id="update-source-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2>Atualizar Fonte do Bot</h2><form id="update-source-form"><p class="modal-description">Insira o URL do repositório GitHub para fazer o deploy. Isto irá substituir a fonte remota atual e puxar a versão mais recente.</p><div class="form-group"><label for="bot-git-url">URL do Repositório Git (HTTPS)</label><input type="url" id="bot-git-url" placeholder="https://github.com/usuario/repositorio.git" required></div><div class="modal-actions"><button type="submit" class="action-btn primary">Confirmar e Fazer Deploy</button><button type="button" class="action-btn close-modal-btn danger">Cancelar</button></div></form></div></div>
-    <div id="log-modal" class="modal-overlay" style="display: none;"><div class="modal-content modal-output"><h2 id="log-modal-title">Logs do Bot</h2><div class="log-container"><pre><code id="log-content"></code></pre></div><div class="modal-actions"><button type="button" class="action-btn close-modal-btn">Fechar</button></div></div></div>
-    <div id="update-modal" class="modal-overlay" style="display: none;"><div class="modal-content modal-output"><h2 id="update-modal-title">Resultado do Deploy</h2><div class="log-container"><pre><code id="update-content"></code></pre></div><div class="modal-actions"><button type="button" class="action-btn close-modal-btn">Fechar</button></div></div></div>
-    <div id="notification-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2 id="notification-title">Aviso</h2><p id="notification-message"></p><div class="modal-actions"><button type="button" class="action-btn close-modal-btn">OK</button></div></div></div>
-    <div id="confirmation-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2 id="confirmation-title">Confirmar Ação</h2><p id="confirmation-message"></p><div class="modal-actions"><button type="button" id="confirm-btn-yes" class="action-btn primary">Confirmar</button><button type="button" id="confirm-btn-no" class="action-btn danger">Cancelar</button></div></div></div>
+    <div id="add-bot-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Adicionar Novo Bot</h2>
+            <form id="add-bot-form">
+                <div class="form-group">
+                    <label for="bot-name">Nome do Processo (ex: meu-bot)</label>
+                    <input type="text" id="bot-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="bot-script">Caminho do Script no Servidor (ex: /root/meu-bot/index.js)</label>
+                    <input type="text" id="bot-script" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="action-btn primary">Adicionar e Iniciar</button>
+                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="update-source-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Atualizar Fonte do Bot</h2>
+            <form id="update-source-form">
+                <p class="modal-description">Insira o URL do repositório GitHub para fazer o deploy. Isto irá substituir a fonte remota atual e puxar a versão mais recente.</p>
+                <div class="form-group">
+                    <label for="bot-git-url">URL do Repositório Git (HTTPS)</label>
+                    <input type="url" id="bot-git-url" placeholder="https://github.com/usuario/repositorio.git" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="action-btn primary">Confirmar e Fazer Deploy</button>
+                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="log-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content modal-output">
+            <h2 id="log-modal-title">Logs do Bot</h2>
+            <div class="log-container">
+                <pre><code id="log-content"></code></pre>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="action-btn close-modal-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="update-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content modal-output">
+            <h2 id="update-modal-title">Resultado do Deploy</h2>
+            <div class="log-container">
+                <pre><code id="update-content"></code></pre>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="action-btn close-modal-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="notification-title">Aviso</h2>
+            <p id="notification-message"></p>
+            <div class="modal-actions">
+                <button type="button" class="action-btn close-modal-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="confirmation-title">Confirmar Ação</h2>
+            <p id="confirmation-message"></p>
+            <div class="modal-actions">
+                <button type="button" id="confirm-btn-yes" class="action-btn primary">Confirmar</button>
+                <button type="button" id="confirm-btn-no" class="action-btn danger">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    
     <input type="file" id="env-file-input" style="display: none;" accept=".env">
-    <div id="notification-manager-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2 id="notification-manager-title">Gerir Notificações</h2><div id="notification-list-container" class="form-group"></div><div class="modal-actions"><button type="button" class="action-btn primary" id="add-new-notification-btn">Adicionar Nova Notificação</button><button type="button" class="action-btn close-modal-btn">Fechar</button></div></div></div>
-    <div id="edit-notification-modal" class="modal-overlay" style="display: none;"><div class="modal-content"><h2 id="edit-notification-title">Adicionar/Editar Notificação</h2><form id="edit-notification-form"><input type="hidden" id="notification-id"><div class="form-group"><label for="notification-name">Nome da Notificação (para sua identificação, ex: Alertas Admin)</label><input type="text" id="notification-name" required></div><div class="form-group"><label for="notification-token">Token do Bot do Telegram</label><input type="password" id="notification-token" required></div><div class="form-group"><label for="notification-chat-id">Chat ID do Telegram (para onde a mensagem será enviada)</label><input type="text" id="notification-chat-id" required></div><p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: -1rem; margin-bottom: 2rem;">Nunca partilhe os seus tokens. Eles serão guardados de forma segura no ficheiro .env do seu bot no servidor.</p><div class="modal-actions"><button type="submit" class="action-btn primary">Salvar e Reiniciar Bot</button><button type="button" class="action-btn close-modal-btn danger">Cancelar</button></div></form></div></div>
+
+    <div id="notification-manager-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="notification-manager-title">Gerir Notificações</h2>
+            <div id="notification-list-container" class="form-group">
+                </div>
+            <div class="modal-actions">
+                <button type="button" class="action-btn primary" id="add-new-notification-btn">Adicionar Nova Notificação</button>
+                <button type="button" class="action-btn close-modal-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-notification-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="edit-notification-title">Adicionar/Editar Notificação</h2>
+            <form id="edit-notification-form">
+                <input type="hidden" id="notification-id">
+                <div class="form-group">
+                    <label for="notification-name">Nome da Notificação (para sua identificação)</label>
+                    <input type="text" id="notification-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="notification-token">Token do Bot do Telegram</label>
+                    <input type="password" id="notification-token" required>
+                </div>
+                <div class="form-group">
+                    <label for="notification-chat-id">Chat ID do Telegram</label>
+                    <input type="text" id="notification-chat-id" required>
+                </div>
+                 <p class="modal-description" style="margin-top: -1rem; margin-bottom: 2rem;">
+                    Nunca partilhe os seus tokens. Eles serão guardados de forma segura no ficheiro .env do seu bot no servidor.
+                </p>
+                <div class="modal-actions">
+                    <button type="submit" class="action-btn primary">Salvar e Reiniciar Bot</button>
+                    <button type="button" class="action-btn close-modal-btn danger">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 <script>
-    let currentLogSocket = null; let currentBotForNotifications = null;
-    function showNotification(title, message, type = 'info') { const modal = document.getElementById('notification-modal'); modal.querySelector('#notification-title').textContent = title; modal.querySelector('#notification-message').textContent = message; modal.style.display = 'flex'; }
-    function showConfirmation(title, message) { return new Promise((resolve) => { const modal = document.getElementById('confirmation-modal'); modal.querySelector('#confirmation-title').textContent = title; modal.querySelector('#confirmation-message').textContent = message; modal.style.display = 'flex'; const btnYes = document.getElementById('confirm-btn-yes'); const btnNo = document.getElementById('confirm-btn-no'); btnYes.onclick = null; btnNo.onclick = null; btnYes.onclick = () => { modal.style.display = 'none'; resolve(true); }; btnNo.onclick = () => { modal.style.display = 'none'; resolve(false); }; }); }
-    async function fetchWithAuth(url, options = {}) { const response = await fetch(url, options); if (response.status === 401) { window.location.href = '/'; throw new Error('Não autorizado'); } if (!response.ok) { const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' })); throw new Error(errorData.error); } return response.json(); }
-    async function manageBot(name, action) { const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' }; const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`); if (!confirmed) return; try { const result = await fetchWithAuth('/api/bots/manage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, action }) }); showNotification('Sucesso', result.message); } catch (error) { showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error'); } }
-    async function deleteBot(name) { const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`); if (!confirmed) return; try { const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' }); showNotification('Sucesso', result.message); } catch (error) { showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error'); } }
-    async function showLogs(name) { const logModal = document.getElementById('log-modal'); const logModalTitle = document.getElementById('log-modal-title'); const logContent = document.getElementById('log-content'); const logContainer = logContent.parentElement; logModal.style.display = 'flex'; logModalTitle.textContent = `Logs de ${name} (a conectar...)`; logContent.textContent = 'A carregar histórico de logs...'; try { const result = await fetchWithAuth(`/api/bots/logs/${name}`); logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n'; logContainer.scrollTop = logContainer.scrollHeight; } catch (error) { logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`; } if (currentLogSocket) currentLogSocket.close(); const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'; const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs/${name}`; currentLogSocket = new WebSocket(wsUrl); currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; }; currentLogSocket.onmessage = (event) => { logContent.textContent += event.data; logContainer.scrollTop = logContainer.scrollHeight; }; currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n'; }; currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; }; }
-    function showUpdateModal(name, scriptPath) { const modal = document.getElementById('update-source-modal'); const form = document.getElementById('update-source-form'); const gitUrlInput = document.getElementById('bot-git-url'); modal.style.display = 'flex'; gitUrlInput.value = ''; form.onsubmit = (event) => { event.preventDefault(); const gitUrl = gitUrlInput.value; modal.style.display = 'none'; updateBot(name, scriptPath, gitUrl); }; }
-    async function updateBot(name, scriptPath, gitUrl) { const modal = document.getElementById('update-modal'); const title = document.getElementById('update-modal-title'); const content = document.getElementById('update-content'); modal.style.display = 'flex'; title.textContent = `Deploy do Bot: ${name}`; content.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`; try { const result = await fetchWithAuth(`/api/bots/update/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath, gitUrl }) }); content.textContent = result.output; } catch (error) { content.textContent = `ERRO NO DEPLOY: ${error.message}`; } }
-    async function uploadEnvFile(name, scriptPath) { const fileInput = document.getElementById('env-file-input'); fileInput.onchange = async (event) => { const file = event.target.files[0]; if (!file) return; const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`); if (!confirmed) { fileInput.value = ''; return; } const reader = new FileReader(); reader.onload = async (e) => { try { const result = await fetchWithAuth(`/api/bots/env/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result, scriptPath }) }); showNotification('Sucesso', result.message); } catch (error) { showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error'); } finally { fileInput.value = ''; } }; reader.readAsText(file); }; fileInput.click(); }
-    async function showNotificationManager(botName, scriptPath) { currentBotForNotifications = { name: botName, scriptPath }; const modal = document.getElementById('notification-manager-modal'); const title = document.getElementById('notification-manager-title'); const container = document.getElementById('notification-list-container'); title.textContent = `Gerir Notificações de "${botName}"`; container.innerHTML = '<p>A carregar configurações...</p>'; modal.style.display = 'flex'; try { const url = `/api/bots/notifications/${encodeURIComponent(botName)}?scriptPath=${encodeURIComponent(scriptPath)}`; const data = await fetchWithAuth(url); renderNotificationList(data.notifications, data.notifierInjected); } catch (error) { container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`; } }
-    function renderNotificationList(notifications = [], notifierInjected) { const container = document.getElementById('notification-list-container'); if (notifications.length === 0) { container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>'; } else { container.innerHTML = notifications.map(notif => `<div class="notification-item"><div><strong>${notif.name}</strong><br><small>Chat ID: ${notif.chatId} | Token: **********</small></div><div class="notification-item-actions"><button class="action-btn-footer" onclick='testNotification(${JSON.stringify(notif)})'><i data-feather="send"></i> Testar</button><button class="action-btn-footer" onclick='showEditNotificationModal(${JSON.stringify(notif)})'><i data-feather="edit"></i> Editar</button></div></div>`).join(''); } if (!notifierInjected && notifications.length > 0) { container.innerHTML += `<p class="info-message" style="color: var(--yellow); margin-top: 1rem;">Aviso: A configuração foi salva, mas o código de envio de notificações ainda precisa ser utilizado no script principal do seu bot. Adicione a linha <code>const { sendNotification } = require('./telegramNotifier.js');</code> no topo do seu script.</p>`; } feather.replace(); }
-    function showEditNotificationModal(notification = null) { const modal = document.getElementById('edit-notification-modal'); const form = document.getElementById('edit-notification-form'); form.reset(); if (notification) { document.getElementById('edit-notification-title').textContent = "Editar Notificação"; document.getElementById('notification-id').value = notification.id; document.getElementById('notification-name').value = notification.name; document.getElementById('notification-token').value = notification.token; document.getElementById('notification-chat-id').value = notification.chatId; } else { document.getElementById('edit-notification-title').textContent = "Adicionar Nova Notificação"; document.getElementById('notification-id').value = Date.now(); } modal.style.display = 'flex'; }
-    async function testNotification(notification) { try { const result = await fetchWithAuth('/api/bots/notifications/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: notification.token, chatId: notification.chatId, message: `Olá! Esta é uma mensagem de teste enviada a partir do seu Painel de Controlo para a notificação "${notification.name}".` }) }); showNotification('Sucesso', result.message); } catch (error) { showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error'); } }
+    // ########## SCRIPT COMPLETO ##########
+
+    // --- Variáveis Globais ---
+    let currentLogSocket = null;
+    let currentBotForNotifications = null;
+
+    // --- Funções de UI Genéricas ---
+    function showNotification(title, message, type = 'info') {
+        const modal = document.getElementById('notification-modal');
+        modal.querySelector('#notification-title').textContent = title;
+        modal.querySelector('#notification-message').textContent = message;
+        modal.style.display = 'flex';
+    }
+
+    function showConfirmation(title, message) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirmation-modal');
+            modal.querySelector('#confirmation-title').textContent = title;
+            modal.querySelector('#confirmation-message').innerHTML = message.replace(/\n/g, '<br>');
+            modal.style.display = 'flex';
+
+            const btnYes = document.getElementById('confirm-btn-yes');
+            const btnNo = document.getElementById('confirm-btn-no');
+
+            btnYes.onclick = null;
+            btnNo.onclick = null;
+
+            btnYes.onclick = () => { modal.style.display = 'none'; resolve(true); };
+            btnNo.onclick = () => { modal.style.display = 'none'; resolve(false); };
+        });
+    }
+
+    async function fetchWithAuth(url, options = {}) {
+        const response = await fetch(url, options);
+        if (response.status === 401) {
+            window.location.href = '/';
+            throw new Error('Não autorizado');
+        }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
+            throw new Error(errorData.error);
+        }
+        return response.json();
+    }
     
+    // --- Lógica de Gestão de Bots ---
+    async function manageBot(name, action) {
+        const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
+        const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
+        if (!confirmed) return;
+
+        try {
+            const result = await fetchWithAuth('/api/bots/manage', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, action })
+            });
+            showNotification('Sucesso', result.message);
+        } catch (error) {
+            showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
+        }
+    }
+
+    async function deleteBot(name) {
+        const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`);
+        if (!confirmed) return;
+
+        try {
+            const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
+            showNotification('Sucesso', result.message);
+        } catch (error) {
+            showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error');
+        }
+    }
+
+    async function showLogs(name) {
+        const logModal = document.getElementById('log-modal');
+        const logModalTitle = document.getElementById('log-modal-title');
+        const logContent = document.getElementById('log-content');
+        const logContainer = logContent.parentElement;
+        
+        logModal.style.display = 'flex';
+        logModalTitle.textContent = `Logs de ${name} (a conectar...)`;
+        logContent.textContent = 'A carregar histórico de logs...';
+
+        try {
+            const result = await fetchWithAuth(`/api/bots/logs/${name}`);
+            logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
+            logContainer.scrollTop = logContainer.scrollHeight;
+        } catch (error) {
+            logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}`;
+        }
+        
+        if (currentLogSocket) currentLogSocket.close();
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs/${name}`;
+        currentLogSocket = new WebSocket(wsUrl);
+
+        currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; };
+        currentLogSocket.onmessage = (event) => { logContent.textContent += event.data; logContainer.scrollTop = logContainer.scrollHeight; };
+        currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET ---\n'; };
+        currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
+    }
+
+    function showUpdateModal(name, scriptPath) {
+        const modal = document.getElementById('update-source-modal');
+        const form = document.getElementById('update-source-form');
+        const gitUrlInput = document.getElementById('bot-git-url');
+        modal.style.display = 'flex';
+        gitUrlInput.value = '';
+        
+        form.onsubmit = (event) => {
+            event.preventDefault();
+            const gitUrl = gitUrlInput.value;
+            modal.style.display = 'none';
+            updateBot(name, scriptPath, gitUrl);
+        };
+    }
+
+    async function updateBot(name, scriptPath, gitUrl) {
+        const modal = document.getElementById('update-modal');
+        const title = document.getElementById('update-modal-title');
+        const content = document.getElementById('update-content');
+        modal.style.display = 'flex';
+        title.textContent = `Deploy do Bot: ${name}`;
+        content.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
+
+        try {
+            const result = await fetchWithAuth(`/api/bots/update/${name}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath, gitUrl })
+            });
+            content.textContent = result.output;
+        } catch (error) {
+            content.textContent = `ERRO NO DEPLOY: ${error.message}`;
+        }
+    }
+
+    async function uploadEnvFile(name, scriptPath) {
+        const fileInput = document.getElementById('env-file-input');
+        fileInput.onchange = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
+            if (!confirmed) { fileInput.value = ''; return; }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const result = await fetchWithAuth(`/api/bots/env/${name}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result, scriptPath })
+                    });
+                    showNotification('Sucesso', result.message);
+                } catch (error) {
+                    showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error');
+                } finally {
+                    fileInput.value = '';
+                }
+            };
+            reader.readAsText(file);
+        };
+        fileInput.click();
+    }
+
+    // --- Lógica de Gestão de Notificações ---
+    async function showNotificationManager(botName, scriptPath) {
+        currentBotForNotifications = { name: botName, scriptPath };
+        const modal = document.getElementById('notification-manager-modal');
+        const title = document.getElementById('notification-manager-title');
+        const container = document.getElementById('notification-list-container');
+        title.textContent = `Gerir Notificações de "${botName}"`;
+        container.innerHTML = '<p>A carregar configurações...</p>';
+        modal.style.display = 'flex';
+
+        try {
+            const url = `/api/bots/notifications/${encodeURIComponent(botName)}?scriptPath=${encodeURIComponent(scriptPath)}`;
+            const data = await fetchWithAuth(url);
+            renderNotificationList(data.notifications, data.notifierInjected);
+        } catch (error) {
+            container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`;
+        }
+    }
+
+    function renderNotificationList(notifications = [], notifierInjected) {
+        const container = document.getElementById('notification-list-container');
+        if (notifications.length === 0) {
+            container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+        } else {
+            container.innerHTML = notifications.map(notif => `
+                <div class="notification-item">
+                    <div>
+                        <strong>${notif.name}</strong><br>
+                        <small>Chat ID: ${notif.chatId} | Token: **********</small>
+                    </div>
+                    <div class="notification-item-actions">
+                        <button class="action-btn-footer" onclick='testNotification(${JSON.stringify(notif)})' title="Enviar Teste"><i data-feather="send"></i> Testar</button>
+                        <button class="action-btn-footer" onclick='showEditNotificationModal(${JSON.stringify(notif)})' title="Editar"><i data-feather="edit"></i> Editar</button>
+                    </div>
+                </div>`).join('');
+        }
+        
+        if (!notifierInjected && notifications.length > 0) {
+            container.innerHTML += `
+                <div class="info-message warning">
+                    <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
+                    <button class="action-btn primary" style="margin-top: 1rem;" onclick="injectNotifierCode()">
+                        <i data-feather="tool" style="margin-right: 0.5rem;"></i>Aplicar Correção Automática
+                    </button>
+                </div>`;
+        }
+        feather.replace();
+    }
+
+    function showEditNotificationModal(notification = null) {
+        const modal = document.getElementById('edit-notification-modal');
+        const form = document.getElementById('edit-notification-form');
+        form.reset();
+        
+        if (notification) {
+            document.getElementById('edit-notification-title').textContent = "Editar Notificação";
+            document.getElementById('notification-id').value = notification.id;
+            document.getElementById('notification-name').value = notification.name;
+            document.getElementById('notification-token').value = notification.token;
+            document.getElementById('notification-chat-id').value = notification.chatId;
+        } else {
+            document.getElementById('edit-notification-title').textContent = "Adicionar Nova Notificação";
+            document.getElementById('notification-id').value = Date.now();
+        }
+        modal.style.display = 'flex';
+    }
+
+    async function testNotification(notification) {
+        try {
+            const result = await fetchWithAuth('/api/bots/notifications/test', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: notification.token, chatId: notification.chatId, message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${notification.name}".` })
+            });
+            showNotification('Sucesso', result.message);
+        } catch (error) {
+            showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
+        }
+    }
+
+    async function injectNotifierCode() {
+        if (!currentBotForNotifications) return;
+        const { name, scriptPath } = currentBotForNotifications;
+        const filename = scriptPath.split(/[\\/]/).pop();
+        const confirmed = await showConfirmation('Confirmar Correção Automática', `Isto irá adicionar a linha de código necessária no topo do ficheiro <b>${filename}</b> e reiniciar o bot <b>${name}</b>.\n\nDeseja continuar?`);
+        if (!confirmed) return;
+
+        try {
+            const result = await fetchWithAuth(`/api/bots/inject-notifier/${name}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath })
+            });
+            showNotification('Sucesso', result.message);
+            showNotificationManager(name, scriptPath); // Recarrega o modal para remover o aviso
+        } catch (error) {
+            showNotification('Falha ao Aplicar Correção', `ERRO: ${error.message}`, 'error');
+        }
+    }
+
+    // --- UI Rendering ---
     function renderBot(bot) {
         const isOnline = bot.pm2_env.status === 'online';
         const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -94,8 +453,28 @@
         `;
     }
 
-    function loadBots(bots = []) { const botListContainer = document.getElementById('bot-list'); if (bots && bots.length > 0) { botListContainer.innerHTML = bots.map(renderBot).join(''); } else { botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>'; } feather.replace(); }
-    function connectDashboardSocket() { const statusElement = document.getElementById('connection-status'); const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'; const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`; const socket = new WebSocket(wsUrl); socket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; }; socket.onmessage = (event) => { try { const message = JSON.parse(event.data); if (message.type === 'statusUpdate') { loadBots(message.data); } } catch (e) { console.error('Failed to parse WebSocket message:', e); } }; socket.onclose = () => { statusElement.textContent = 'Desconectado. Tentando reconectar...'; statusElement.style.color = 'var(--red)'; setTimeout(connectDashboardSocket, 3000); }; socket.onerror = (error) => { statusElement.textContent = 'Erro de Conexão'; statusElement.style.color = 'var(--red)'; console.error('WebSocket Error:', error); socket.close(); }; }
+    function loadBots(bots = []) {
+        const botListContainer = document.getElementById('bot-list');
+        if (bots && bots.length > 0) {
+            botListContainer.innerHTML = bots.map(renderBot).join('');
+        } else {
+            botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>';
+        }
+        feather.replace();
+    }
+
+    // --- WebSocket e Event Listeners ---
+    function connectDashboardSocket() {
+        const statusElement = document.getElementById('connection-status');
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; };
+        socket.onmessage = (event) => { try { const message = JSON.parse(event.data); if (message.type === 'statusUpdate') { loadBots(message.data); } } catch (e) { console.error('Failed to parse WebSocket message:', e); } };
+        socket.onclose = () => { statusElement.textContent = 'Desconectado. Tentando reconectar...'; statusElement.style.color = 'var(--red)'; setTimeout(connectDashboardSocket, 3000); };
+        socket.onerror = (error) => { statusElement.textContent = 'Erro de Conexão'; statusElement.style.color = 'var(--red)'; console.error('WebSocket Error:', error); socket.close(); };
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('add-bot-btn').addEventListener('click', () => { document.getElementById('add-bot-modal').style.display = 'flex'; });
@@ -103,11 +482,13 @@
         window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
         document.getElementById('add-bot-form').addEventListener('submit', async (event) => { event.preventDefault(); const name = document.getElementById('bot-name').value; const scriptPath = document.getElementById('bot-script').value; try { const result = await fetchWithAuth('/api/bots/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, scriptPath }) }); document.getElementById('add-bot-modal').style.display = 'none'; document.getElementById('add-bot-form').reset(); showNotification('Sucesso', result.message); } catch (error) { showNotification('Falha ao Adicionar', `ERRO: ${error.message}`, 'error'); } });
         document.getElementById('logout-btn').addEventListener('click', async () => { const confirmed = await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?'); if (confirmed) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
-        document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { event.preventDefault(); const notification = { id: document.getElementById('notification-id').value, name: document.getElementById('notification-name').value, token: document.getElementById('notification-token').value, chatId: document.getElementById('notification-chat-id').value, }; try { const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) }); document.getElementById('edit-notification-modal').style.display = 'none'; showNotification('Sucesso', result.message); showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); } catch (error) { showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); } });
+        document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { event.preventDefault(); const notification = { id: document.getElementById('notification-id').value, name: document.getElementById('notification-name').value, token: document.getElementById('notification-token').value, chatId: document.getElementById('notification-chat-id').value }; try { const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) }); document.getElementById('edit-notification-modal').style.display = 'none'; showNotification('Sucesso', result.message); showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); } catch (error) { showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); } });
         document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
+        
         feather.replace();
         connectDashboardSocket();
     });
 </script>
+
 </body>
 </html>
