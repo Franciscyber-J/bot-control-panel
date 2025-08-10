@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E CORRIGIDO)
+// ARQUIVO: server.js (COMPLETO E COM CORREÇÃO DEFINITIVA)
 
 require('dotenv').config();
 const express = require('express');
@@ -127,24 +127,27 @@ const sshConfig = {
 };
 const dashboardClients = new Set();
 
-async function getBotsStatus() {
-    const ssh = new NodeSSH();
+// Esta função já é fiável, vamos reutilizá-la
+async function getBotsStatus(sshInstance) {
+    const ssh = sshInstance || new NodeSSH();
+    const shouldDispose = !sshInstance;
     try {
-        await ssh.connect(sshConfig);
+        if (!ssh.connection) await ssh.connect(sshConfig);
         const command = `${NVM_PREFIX}pm2 jlist`;
         const result = await ssh.execCommand(command);
         if (result.code !== 0) {
             console.error('Falha ao obter a lista de bots:', result.stderr);
-            return [];
+            throw new Error(`Falha ao executar pm2 jlist: ${result.stderr}`);
         }
         return JSON.parse(result.stdout);
     } catch (error) {
         console.error(`Falha ao buscar status dos bots: ${error.message}`);
         return [];
     } finally {
-        if (ssh.connection) ssh.dispose();
+        if (shouldDispose && ssh.connection) ssh.dispose();
     }
 }
+
 
 async function broadcastStatus() {
     if (dashboardClients.size === 0) return;
@@ -174,7 +177,6 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', (ws, request) => {
     const { pathname } = url.parse(request.url);
     
-    // Lógica para o Dashboard
     if (pathname === '/ws/dashboard') {
         dashboardClients.add(ws);
         getBotsStatus().then(status => {
@@ -198,48 +200,27 @@ wss.on('connection', (ws, request) => {
         return;
     }
 
-    // Lógica para os Logs
     const logMatch = pathname.match(/^\/ws\/logs\/(.+)$/);
     if (logMatch) {
         const botName = logMatch[1];
-        if (!botName) {
-            return ws.close(1008, 'Nome do bot não fornecido.');
-        }
+        if (!botName) return ws.close(1008, 'Nome do bot não fornecido.');
 
         const ssh = new NodeSSH();
-        ssh.connect(sshConfig)
-            .then(() => {
-                ssh.execCommand(`${NVM_PREFIX}pm2 logs ${botName} --raw --lines 20`, {
-                    onStdout: (chunk) => {
-                        if (ws.readyState === ws.OPEN) {
-                            ws.send(chunk.toString('utf8'));
-                        }
-                    },
-                    onStderr: (chunk) => {
-                        if (ws.readyState === ws.OPEN) {
-                            ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`);
-                        }
-                    }
-                });
-            })
-            .catch(err => {
-                if (ws.readyState === ws.OPEN) {
-                    ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.');
-                }
+        ssh.connect(sshConfig).then(() => {
+            ssh.execCommand(`${NVM_PREFIX}pm2 logs ${botName} --raw --lines 20`, {
+                onStdout: (chunk) => ws.readyState === ws.OPEN && ws.send(chunk.toString('utf8')),
+                onStderr: (chunk) => ws.readyState === ws.OPEN && ws.send(`[ERRO SSH]: ${chunk.toString('utf8')}`)
             });
+        }).catch(err => ws.readyState === ws.OPEN && ws.close(1011, 'Erro no servidor ao iniciar o stream de logs.'));
 
-        ws.on('close', () => {
-            if (ssh.connection) {
-                ssh.dispose();
-            }
-        });
+        ws.on('close', () => ssh.connection && ssh.dispose());
         return;
     }
 
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
-// ########## FUNÇÃO CORRIGIDA E ROBUSTA ##########
+// ########## FUNÇÃO COM A CORREÇÃO FINAL ##########
 async function handleResetSession(ws, data) {
     const { name, scriptPath } = data;
     const sendProgress = (message) => {
@@ -254,9 +235,7 @@ async function handleResetSession(ws, data) {
     const waitForCondition = async (condition, timeout = 30000, interval = 2000) => {
         const startTime = Date.now();
         while (Date.now() - startTime < timeout) {
-            if (await condition()) {
-                return true;
-            }
+            if (await condition()) return true;
             await new Promise(resolve => setTimeout(resolve, interval));
         }
         return false;
@@ -266,53 +245,37 @@ async function handleResetSession(ws, data) {
         await ssh.connect(sshConfig);
 
         sendProgress(`Iniciando limpeza de sessão para '${name}'...`);
-        sendProgress(`Aguarde, isto pode demorar um pouco.`);
 
-        sendProgress(`A enviar comando para parar o bot (se estiver a correr)...`);
+        sendProgress(`A enviar comando para parar o bot...`);
         await ssh.execCommand(`${NVM_PREFIX}pm2 stop ${name}`);
 
         sendProgress(`A verificar se o bot está parado...`);
         const isStopped = await waitForCondition(async () => {
-            const result = await ssh.execCommand(`${NVM_PREFIX}pm2 describe ${name}`);
-            
-            // VERIFICAÇÃO ROBUSTA: Primeiro, verifica se o comando falhou.
-            if (result.code !== 0) {
-                // Se o comando 'describe' falhar, pode ser porque o bot já foi parado e não está "ativo".
-                // Isto não é necessariamente um erro fatal, mas logamos para depuração.
-                // O mais importante é verificar o jlist a seguir.
-                sendProgress(`Aviso: 'pm2 describe' falhou. A verificar a lista geral de processos... (stderr: ${result.stderr})`);
-                const jlistResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
-                if (jlistResult.code === 0) {
-                    const bots = JSON.parse(jlistResult.stdout);
-                    const bot = bots.find(b => b.name === name);
-                    // Se não encontrar o bot, ou se o status for stopped/errored, consideramos parado.
-                    if (!bot || bot.pm2_env.status === 'stopped' || bot.pm2_env.status === 'errored') {
-                        return true;
-                    }
-                }
-                return false; // Se a verificação alternativa também não confirmar, continue a tentar.
+            // LÓGICA DE VERIFICAÇÃO FIÁVEL: USA A MESMA FUNÇÃO DO DASHBOARD
+            const statuses = await getBotsStatus(ssh);
+            const botInfo = statuses.find(b => b.name === name);
+            // Considera-se parado se não for encontrado ou se o status for 'stopped' ou 'errored'
+            if (!botInfo || ['stopped', 'errored'].includes(botInfo.pm2_env.status)) {
+                return true;
             }
-
-            // Se o comando 'describe' funcionou, verifica o status.
-            const statusOk = result.stdout.includes('"status":"stopped"') || result.stdout.includes('"status":"errored"') || result.stdout.includes('"status":"stopping"');
-            return statusOk;
-        }, 30000, 2000);
+            return false;
+        });
 
         if (!isStopped) {
-            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança. Verifique os logs do servidor PM2.`);
+            throw new Error(`O bot '${name}' não parou a tempo. A operação foi cancelada por segurança.`);
         }
         sendProgress(`Bot confirmado como parado.`);
 
-        sendProgress(`A apagar pastas de sessão...`);
-        const sessionPath = path.join(botDirectory, '.wwebjs_auth');
-        const rmResult = await ssh.execCommand(`rm -rf ${sessionPath}`);
+        sendProgress(`A apagar a pasta de sessão .wwebjs_auth...`);
+        const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth'); // Usar path.posix para garantir barras corretas
+        const rmResult = await ssh.execCommand(`rm -rf "${sessionPath}"`);
         if(rmResult.code !== 0){
              throw new Error(`Falha ao executar o comando para apagar a pasta de sessão: ${rmResult.stderr}`);
         }
         
         sendProgress(`A verificar se a pasta foi apagada...`);
         const checkDeletion = await waitForCondition(async () => {
-            const result = await ssh.execCommand(`test -d ${sessionPath} && echo "exists" || echo "deleted"`);
+            const result = await ssh.execCommand(`test -d "${sessionPath}" && echo "exists" || echo "deleted"`);
             return result.stdout.includes('deleted');
         }, 10000, 1000);
 
@@ -340,7 +303,6 @@ async function handleResetSession(ws, data) {
         }
     }
 }
-// #########################################
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
