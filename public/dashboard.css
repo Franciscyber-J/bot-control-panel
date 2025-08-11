@@ -85,6 +85,9 @@ body::before {
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .action-btn:hover {
     color: var(--text-primary);
@@ -349,4 +352,25 @@ body::before {
 
 #notification-modal {
     z-index: 101;
+}
+
+/* ### ESTILOS PARA O INDICADOR DE LOADING ### */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: 0.75rem;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: var(--text-primary);
+    animation: spin 1s linear infinite;
+}
+
+.action-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
 }

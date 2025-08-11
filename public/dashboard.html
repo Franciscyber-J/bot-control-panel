@@ -177,7 +177,7 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO - V7 (GESTÃO DE USUÁRIOS) ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO - V8 (INDICADOR DE LOADING) ##########
 
     let currentLogSocket = null;
     let currentBotForNotifications = null;
@@ -284,11 +284,21 @@
         modal.style.display = 'flex';
         gitUrlInput.value = '';
         
-        form.onsubmit = (event) => {
+        form.onsubmit = async (event) => {
             event.preventDefault();
+
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="loading-spinner"></span>A fazer deploy...`;
+
             const gitUrl = gitUrlInput.value;
             modal.style.display = 'none';
-            updateBot(name, scriptPath, gitUrl);
+            
+            await updateBot(name, scriptPath, gitUrl);
+
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalButtonText;
         };
     }
 
@@ -400,7 +410,6 @@
                                 title="Editar">
                             <i data-feather="edit"></i> Editar
                         </button>
-                        <!-- ### NOVO BOTÃO DE REMOVER ### -->
                         <button class="action-btn-footer danger delete-notification-btn" 
                                 data-notification-id="${notif.id}"
                                 data-notification-name="${notif.name.replace(/"/g, '&quot;')}"
@@ -465,7 +474,6 @@
         }
     }
 
-    // ### NOVA FUNÇÃO PARA REMOVER NOTIFICAÇÃO ###
     async function deleteNotification(notificationId, notificationName) {
         if (!currentBotForNotifications) return;
         const { name: botName, scriptPath } = currentBotForNotifications;
@@ -477,7 +485,7 @@
             const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}?scriptPath=${encodeURIComponent(scriptPath)}`;
             const result = await fetchWithAuth(url, { method: 'DELETE' });
             showNotification('Sucesso', result.message);
-            showNotificationManager(botName, scriptPath); // Atualiza a lista
+            showNotificationManager(botName, scriptPath);
         } catch (error) {
             showNotification('Falha ao Remover', `ERRO: ${error.message}`, 'error');
         }
@@ -589,10 +597,6 @@
     document.addEventListener('DOMContentLoaded', () => {
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
-        const uploadEnvBtnAdd = document.getElementById('upload-env-btn-add');
-        const envFileInputAdd = document.getElementById('bot-env-file-add');
-        const envFileStatus = document.getElementById('env-file-status');
-        const addBotSubmitBtn = document.getElementById('add-bot-submit-btn');
         const botListContainer = document.getElementById('bot-list');
         const notificationListContainer = document.getElementById('notification-list-container');
 
@@ -623,7 +627,6 @@
                 const notificationData = JSON.parse(button.dataset.notification);
                 showEditNotificationModal(notificationData);
             }
-            // ### NOVO EVENTO PARA REMOVER ###
             if (button.classList.contains('delete-notification-btn')) {
                 const { notificationId, notificationName } = button.dataset;
                 deleteNotification(notificationId, notificationName);
@@ -633,41 +636,48 @@
         document.getElementById('add-bot-btn').addEventListener('click', () => {
             addBotForm.reset();
             newBotEnvContent = null;
-            addBotSubmitBtn.disabled = true;
-            envFileStatus.textContent = 'Nenhum ficheiro selecionado.';
-            envFileStatus.style.color = 'var(--text-secondary)';
+            document.getElementById('add-bot-submit-btn').disabled = true;
+            document.getElementById('env-file-status').textContent = 'Nenhum ficheiro selecionado.';
+            document.getElementById('env-file-status').style.color = 'var(--text-secondary)';
             addBotModal.style.display = 'flex';
         });
 
-        uploadEnvBtnAdd.addEventListener('click', () => envFileInputAdd.click());
+        document.getElementById('upload-env-btn-add').addEventListener('click', () => document.getElementById('bot-env-file-add').click());
 
-        envFileInputAdd.addEventListener('change', (event) => {
+        document.getElementById('bot-env-file-add').addEventListener('change', (event) => {
             const file = event.target.files[0];
+            const statusEl = document.getElementById('env-file-status');
+            const submitBtn = document.getElementById('add-bot-submit-btn');
             if (!file) {
                 newBotEnvContent = null;
-                addBotSubmitBtn.disabled = true;
-                envFileStatus.textContent = 'Nenhum ficheiro selecionado.';
-                envFileStatus.style.color = 'var(--text-secondary)';
+                submitBtn.disabled = true;
+                statusEl.textContent = 'Nenhum ficheiro selecionado.';
+                statusEl.style.color = 'var(--text-secondary)';
                 return;
             }
             const reader = new FileReader();
             reader.onload = (e) => {
                 newBotEnvContent = e.target.result;
-                envFileStatus.textContent = `Ficheiro "${file.name}" carregado.`;
-                envFileStatus.style.color = 'var(--green)';
-                addBotSubmitBtn.disabled = false;
+                statusEl.textContent = `Ficheiro "${file.name}" carregado.`;
+                statusEl.style.color = 'var(--green)';
+                submitBtn.disabled = false;
             };
             reader.onerror = () => {
                 newBotEnvContent = null;
-                addBotSubmitBtn.disabled = true;
-                envFileStatus.textContent = 'Erro ao ler o ficheiro.';
-                envFileStatus.style.color = 'var(--red)';
+                submitBtn.disabled = true;
+                statusEl.textContent = 'Erro ao ler o ficheiro.';
+                statusEl.style.color = 'var(--red)';
             };
             reader.readAsText(file);
         });
         
         addBotForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            const submitButton = document.getElementById('add-bot-submit-btn');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="loading-spinner"></span>Adicionando...`;
+
             const gitUrl = document.getElementById('bot-git-url-add').value;
             const name = document.getElementById('bot-name-add').value;
             const updateModal = document.getElementById('update-modal');
@@ -689,6 +699,9 @@
                 addBotForm.reset();
             } catch (error) {
                 updateContent.textContent = `ERRO AO ADICIONAR O BOT:\n\n${error.message}`;
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
             }
         });
         
@@ -698,6 +711,11 @@
         
         document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { 
             event.preventDefault(); 
+            const submitButton = event.target.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="loading-spinner"></span>Salvando...`;
+
             const notification = { 
                 id: document.getElementById('notification-id').value, 
                 name: document.getElementById('notification-name').value, 
@@ -716,7 +734,10 @@
                 showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); 
             } catch (error) { 
                 showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); 
-            } 
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            }
         });
 
         document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
