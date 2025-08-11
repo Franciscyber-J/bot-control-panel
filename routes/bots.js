@@ -1,6 +1,6 @@
-// ARQUIVO: routes/bots.js (COM GESTÃO DE USUÁRIOS)
+// ARQUIVO: routes/bots.js (COM GESTÃO DE USUÁRIOS E ATUALIZAÇÃO DE BRANCH DINÂMICA)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 6.0 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 7.0 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -171,21 +171,34 @@ router.get('/bots/logs/:name', async (req, res) => {
 router.post('/bots/update/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { scriptPath, gitUrl } = req.body;
-    if (!name || !scriptPath || !gitUrl) return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
+    if (!name || !scriptPath || !gitUrl) {
+        return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
+    }
 
     const botDirectory = path.posix.dirname(scriptPath);
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
+        
+        let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
+
+        fullOutput += `> Verificando a branch principal do repositório...\n`;
+        const findBranchCmd = `git -C "${botDirectory}" remote show origin | grep 'HEAD branch' | cut -d' ' -f4`;
+        const findBranchResult = await ssh.execCommand(findBranchCmd);
+        if (findBranchResult.code !== 0 || !findBranchResult.stdout.trim()) {
+            throw new Error(`Não foi possível determinar a branch principal (main/master). Verifique o repositório. Saída: ${findBranchResult.stderr}`);
+        }
+        const mainBranch = findBranchResult.stdout.trim();
+        fullOutput += `> Branch principal encontrada: ${mainBranch}\n\n`;
+
         const commands = [
             `git -C "${botDirectory}" remote set-url origin ${gitUrl}`,
             `git -C "${botDirectory}" fetch origin`,
-            `git -C "${botDirectory}" reset --hard origin/master`,
+            `git -C "${botDirectory}" reset --hard origin/${mainBranch}`,
             `${NVM_PREFIX}npm --prefix "${botDirectory}" install`,
             `${NVM_PREFIX}pm2 reload "${name}"`
         ];
 
-        let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
         for (const command of commands) {
             fullOutput += `> Executando: ${command}\n`;
             const result = await ssh.execCommand(command);
@@ -287,7 +300,6 @@ router.post('/bots/notifications/:name', jsonParser, async (req, res) => {
     }
 });
 
-// ### NOVA ROTA PARA REMOVER NOTIFICAÇÃO ###
 router.delete('/bots/notifications/:name/:notificationId', async (req, res) => {
     const { name, notificationId } = req.params;
     const { scriptPath } = req.query;
