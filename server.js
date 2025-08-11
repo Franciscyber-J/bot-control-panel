@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E COM A CORREÇÃO FINAL PARA BOTS EXISTENTES)
+// ARQUIVO: server.js (COMPLETO E COM VERIFICADOR DE REQUISIÇÃO - V3)
 
 require('dotenv').config();
 const express = require('express');
@@ -43,7 +43,25 @@ const checkAuth = (req, res, next) => {
     res.redirect('/');
 };
 
-app.use(express.json({ limit: '10mb' }));
+// ### PASSO DE DEPURAÇÃO ADICIONADO ###
+// O middleware express.json() agora tem um "verificador".
+// Ele irá capturar o corpo da requisição ANTES de o tentar processar como JSON.
+// Isto vai-nos mostrar exatamente o que o servidor está a receber.
+app.use(express.json({
+    limit: '10mb',
+    verify: (req, res, buf, encoding) => {
+        try {
+            // Guardamos o corpo "raw" na requisição para podermos logá-lo mais tarde.
+            if (buf && buf.length) {
+                req.rawBody = buf.toString(encoding);
+                console.log(`[BCP VERIFY] Corpo RAW recebido para ${req.method} ${req.originalUrl}:`, req.rawBody);
+            }
+        } catch (e) {
+            console.error("[BCP ERROR] Falha ao processar o corpo raw da requisição no verificador:", e);
+        }
+    }
+}));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
