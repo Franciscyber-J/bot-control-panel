@@ -180,7 +180,7 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
         const commands = [
             `git -C "${botDirectory}" remote set-url origin ${gitUrl}`,
             `git -C "${botDirectory}" fetch origin`,
-            `git -C "${botDirectory}" reset --hard origin/main`,
+            `git -C "${botDirectory}" reset --hard origin/master`,
             `${NVM_PREFIX}npm --prefix "${botDirectory}" install`,
             `${NVM_PREFIX}pm2 reload "${name}"`
         ];
