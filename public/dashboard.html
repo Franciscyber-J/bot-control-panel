@@ -103,7 +103,7 @@
     <div id="notification-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2 id="notification-title">Aviso</h2>
-            <p id="notification-message"></p>
+            <p id="notification-message" style="white-space: pre-wrap; text-align: left; background-color: #010409; padding: 1rem; border-radius: 6px;"></p>
             <div class="modal-actions">
                 <button type="button" class="action-btn close-modal-btn">OK</button>
             </div>
@@ -147,7 +147,7 @@
                 <div class="form-group">
                     <label for="notification-token">Token do Bot do Telegram</label>
                     <div class="input-with-icon">
-                        <input type="password" id="notification-token" required>
+                        <input type="password" id="notification-token" required autocomplete="new-password">
                         <span class="input-icon-toggle" id="toggle-token-visibility">
                             <i data-feather="eye" class="icon-eye"></i>
                             <i data-feather="eye-off" class="icon-eye-off" style="display: none;"></i>
@@ -171,7 +171,7 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO - V2 ##########
 
     // --- Variáveis Globais ---
     let currentLogSocket = null;
@@ -373,7 +373,6 @@
         }
     }
 
-    // ### FUNÇÃO CORRIGIDA PARA USAR ATRIBUTOS DATA-* ###
     function renderNotificationList(notifications = [], notifierInjected) {
         const container = document.getElementById('notification-list-container');
         if (notifications.length === 0) {
@@ -436,10 +435,17 @@
     }
 
     async function testNotification(name, token, chatId) {
+        // ### PASSO DE DEPURAÇÃO ADICIONADO ###
+        // Mostra um alerta com os dados que estão a ser enviados.
+        const debugMessage = `A enviar para o servidor:\n\nNome: ${name}\nToken: ${token}\nChat ID: ${chatId}`;
+        showNotification('Dados de Depuração (Cliente)', debugMessage);
+        
         if (!token || !chatId) {
+            // Este alerta é redundante por causa do de cima, mas é uma segurança extra.
             showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
             return;
         }
+
         try {
             const result = await fetchWithAuth('/api/bots/notifications/test', {
                 method: 'POST', 
@@ -594,7 +600,6 @@
             const button = event.target.closest('button');
             if (!button) return;
             if (button.classList.contains('test-notification-btn')) {
-                // CORREÇÃO: Usar 'chatId' (camelCase) que o dataset gera a partir de 'data-chat-id'
                 const { name, token, chatId } = button.dataset;
                 testNotification(name, token, chatId);
             }

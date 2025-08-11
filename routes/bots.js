@@ -1,4 +1,10 @@
-// ARQUIVO: routes/bots.js (COMPLETO E COM LOGS ADICIONADOS)
+// ARQUIVO: routes/bots.js (COMPLETO E COM LOGS ADICIONADOS - V2)
+
+// ### PASSO DE DEPURAÇÃO ADICIONADO ###
+// Este log confirma que o Node.js está a carregar este ficheiro específico.
+// Se esta mensagem não aparecer quando você reiniciar o servidor, o ficheiro antigo ainda está em uso.
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 2.0 ---');
+
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -273,28 +279,23 @@ router.post('/bots/notifications/:name', async (req, res) => {
 
 // ROTA COM LOGS ADICIONADOS
 router.post('/bots/notifications/test', async (req, res) => {
-    // Adicionando logs detalhados para depuração
-    console.log('--- [INÍCIO TESTE DE NOTIFICAÇÃO] ---');
-    console.log(`[${new Date().toISOString()}] Recebida requisição POST para /api/bots/notifications/test`);
-    console.log('Corpo da Requisição Recebido:', JSON.stringify(req.body, null, 2));
+    console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
+    console.log(`[BCP DEBUG] Corpo da requisição recebido:`, req.body);
 
     const { token, chatId, message } = req.body;
 
     if (!token || !chatId) {
-        console.error(`[FALHA NA VALIDAÇÃO] Token ou Chat ID em falta. Token: '${token}', ChatID: '${chatId}'`);
-        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM ERRO] ---');
-        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor. Verifique a chamada no frontend.' });
+        console.error(`[BCP ERROR] Falha na validação da rota de teste. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
+        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor. Verifique os dados no cliente e a requisição.' });
     }
 
     try {
-        console.log(`[VALIDAÇÃO OK] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
+        console.log(`[BCP DEBUG] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
-        console.log(`[SUCESSO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
-        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM SUCESSO] ---');
+        console.log(`[BCP INFO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
     } catch (error) {
-        console.error(`[ERRO NO ENVIO] Falha ao enviar mensagem para o Chat ID ${chatId}. Erro: ${error.message}`);
-        console.log('--- [FIM TESTE DE NOTIFICAÇÃO COM ERRO] ---');
+        console.error(`[BCP ERROR] Falha ao enviar mensagem de teste para o Chat ID ${chatId}. Erro: ${error.message}`);
         res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
