@@ -143,6 +143,13 @@
                     <label for="notification-name">Nome da Notificação (para sua identificação)</label>
                     <input type="text" id="notification-name" required>
                 </div>
+
+                <!-- ### CAMPO NOVO ADICIONADO ### -->
+                <div class="form-group">
+                    <label for="notification-purpose">Finalidade (Identificador usado no código)</label>
+                    <input type="text" id="notification-purpose" placeholder="ex: alerta_novo_lead" required>
+                    <small style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px; display: block;">Este é o nome que você usará na função `sendNotification('...')`.</small>
+                </div>
                 
                 <div class="form-group">
                     <label for="notification-token">Token do Bot do Telegram</label>
@@ -171,15 +178,13 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO - V4 ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO - V6 (FINALIDADE) ##########
 
-    // --- Variáveis Globais ---
     let currentLogSocket = null;
     let currentBotForNotifications = null;
     let newBotEnvContent = null;
     let dashboardSocket = null;
 
-    // --- Funções de UI Genéricas ---
     function showNotification(title, message, type = 'info') {
         const modal = document.getElementById('notification-modal');
         modal.querySelector('#notification-title').textContent = title;
@@ -200,39 +205,19 @@
         });
     }
 
-    // ### FUNÇÃO COM LOGS DE DEPURAÇÃO ADICIONADOS ###
     async function fetchWithAuth(url, options = {}) {
-        console.log(`[CLIENT DEBUG] A iniciar fetch para: ${url}`, options);
-        try {
-            const response = await fetch(url, options);
-            console.log(`[CLIENT DEBUG] Resposta recebida. Status: ${response.status}`);
-
-            if (response.status === 401) {
-                console.warn('[CLIENT DEBUG] Não autorizado (401). A redirecionar para o login.');
-                window.location.href = '/';
-                throw new Error('Não autorizado');
-            }
-
-            const responseBody = await response.json().catch(err => {
-                console.error('[CLIENT DEBUG] Falha ao processar a resposta como JSON.', err);
-                return { error: 'A resposta do servidor não é um JSON válido.' };
-            });
-
-            console.log('[CLIENT DEBUG] Corpo da resposta (JSON):', responseBody);
-
-            if (!response.ok) {
-                console.error(`[CLIENT DEBUG] A resposta não foi OK (${response.status}). Erro:`, responseBody.error);
-                throw new Error(responseBody.error || `Falha na requisição com status ${response.status}`);
-            }
-
-            return responseBody;
-        } catch (error) {
-            console.error(`[CLIENT DEBUG] Erro catastrófico na função fetchWithAuth para ${url}:`, error);
-            throw error; // Re-lança o erro para ser tratado pela função que chamou
+        const response = await fetch(url, options);
+        if (response.status === 401) {
+            window.location.href = '/';
+            throw new Error('Não autorizado');
         }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
+            throw new Error(errorData.error);
+        }
+        return response.json();
     }
     
-    // --- Lógica de Gestão de Bots ---
     async function manageBot(name, action) {
         const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
         const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
@@ -353,7 +338,6 @@
         fileInput.click();
     }
     
-    // --- Lógica de Sessão do WhatsApp ---
     async function resetBotSession(botName, scriptPath) {
         const confirmed = await showConfirmation(
             'Adicionar Novo Número', 
@@ -373,7 +357,6 @@
         }
     }
     
-    // --- Lógica de Gestão de Notificações ---
     async function showNotificationManager(botName, scriptPath) {
         currentBotForNotifications = { name: botName, scriptPath };
         const modal = document.getElementById('notification-manager-modal');
@@ -403,7 +386,7 @@
                 <div class="notification-item">
                     <div>
                         <strong>${notif.name}</strong><br>
-                        <small>Chat ID: ${notif.chatId} | Token: **********</small>
+                        <small>Finalidade: <code>${notif.purpose || 'Não definida'}</code> | Chat ID: ${notif.chatId}</small>
                     </div>
                     <div class="notification-item-actions">
                         <button class="action-btn-footer test-notification-btn" 
@@ -444,6 +427,7 @@
             document.getElementById('edit-notification-title').textContent = "Editar Notificação";
             document.getElementById('notification-id').value = notification.id;
             document.getElementById('notification-name').value = notification.name;
+            document.getElementById('notification-purpose').value = notification.purpose || '';
             document.getElementById('notification-token').value = notification.token;
             document.getElementById('notification-chat-id').value = notification.chatId;
         } else {
@@ -454,8 +438,6 @@
     }
 
     async function testNotification(name, token, chatId) {
-        console.log(`[CLIENT DEBUG] A preparar para testar notificação:`, { name, token, chatId });
-        
         if (!token || !chatId) {
             showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Verifique os dados.', 'error');
             return;
@@ -495,7 +477,6 @@
         }
     }
     
-    // --- UI Rendering ---
     function renderBot(bot) {
         const isOnline = bot.pm2_env.status === 'online';
         const statusClass = isOnline ? 'status-online' : 'status-offline';
@@ -547,7 +528,6 @@
         feather.replace();
     }
     
-    // --- WebSocket ---
     function connectDashboardSocket() {
         const statusElement = document.getElementById('connection-status');
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -582,7 +562,6 @@
         };
     }
 
-    // --- Event Listeners ---
     document.addEventListener('DOMContentLoaded', () => {
         const addBotModal = document.getElementById('add-bot-modal');
         const addBotForm = document.getElementById('add-bot-form');
@@ -593,7 +572,6 @@
         const botListContainer = document.getElementById('bot-list');
         const notificationListContainer = document.getElementById('notification-list-container');
 
-        // Event Delegation para todos os botões dos cards
         botListContainer.addEventListener('click', (event) => {
             const button = event.target.closest('button');
             if (!button) return;
@@ -610,7 +588,6 @@
             if (button.classList.contains('update-source-btn')) showUpdateModal(botName, scriptPath);
         });
         
-        // Event Delegation para os botões do gestor de notificações
         notificationListContainer.addEventListener('click', (event) => {
             const button = event.target.closest('button');
             if (!button) return;
@@ -624,7 +601,6 @@
             }
         });
 
-        // Listeners para o modal de adicionar bot
         document.getElementById('add-bot-btn').addEventListener('click', () => {
             addBotForm.reset();
             newBotEnvContent = null;
@@ -687,14 +663,35 @@
             }
         });
         
-        // Listeners genéricos para modais e logout
         document.querySelectorAll('.close-modal-btn').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.modal-overlay'); if (modal.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } modal.style.display = 'none'; }); });
         window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
         document.getElementById('logout-btn').addEventListener('click', async () => { if (await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?')) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
-        document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { event.preventDefault(); const notification = { id: document.getElementById('notification-id').value, name: document.getElementById('notification-name').value, token: document.getElementById('notification-token').value, chatId: document.getElementById('notification-chat-id').value }; try { const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) }); document.getElementById('edit-notification-modal').style.display = 'none'; showNotification('Sucesso', result.message); showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); } catch (error) { showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); } });
+        
+        document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { 
+            event.preventDefault(); 
+            const notification = { 
+                id: document.getElementById('notification-id').value, 
+                name: document.getElementById('notification-name').value, 
+                purpose: document.getElementById('notification-purpose').value,
+                token: document.getElementById('notification-token').value, 
+                chatId: document.getElementById('notification-chat-id').value 
+            }; 
+            try { 
+                const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) 
+                }); 
+                document.getElementById('edit-notification-modal').style.display = 'none'; 
+                showNotification('Sucesso', result.message); 
+                showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); 
+            } catch (error) { 
+                showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); 
+            } 
+        });
+
         document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
         
-        // Listener para visibilidade do token
         const toggleTokenBtn = document.getElementById('toggle-token-visibility');
         const tokenInput = document.getElementById('notification-token');
         const iconEye = toggleTokenBtn.querySelector('.icon-eye');
