@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E CORRIGIDO - V4)
+// ARQUIVO: server.js (VERSÃO FINAL E LIMPA - V5)
 
 require('dotenv').config();
 const express = require('express');
@@ -43,11 +43,6 @@ const checkAuth = (req, res, next) => {
     res.redirect('/');
 };
 
-// ### CORREÇÃO ###
-// O middleware express.json() foi removido daqui para ser colocado
-// diretamente no ficheiro de rotas (routes/bots.js).
-// Isto garante que ele é aplicado apenas onde é necessário e evita conflitos.
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -61,7 +56,8 @@ app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-app.post('/api/login', express.json(), (req, res) => { // Adicionado parser aqui para a rota de login
+// Adiciona o parser de JSON especificamente para as rotas que precisam dele
+app.post('/api/login', express.json(), (req, res) => {
     const { username, password } = req.body;
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
         return res.status(500).json({ error: 'As credenciais de administrador não estão configuradas no servidor.' });
@@ -140,9 +136,8 @@ async function getBotsStatus(sshInstance) {
         const result = await ssh.execCommand(command);
         if (result.code !== 0) {
             console.error('Falha ao obter a lista de bots:', result.stderr);
-            return []; // Retorna array vazio em caso de erro para não quebrar a lógica seguinte
+            return [];
         }
-        // Se stdout estiver vazio, pm2 pode não ter processos, retorna array vazio
         if (!result.stdout) return [];
         return JSON.parse(result.stdout);
     } catch (error) {
@@ -225,7 +220,7 @@ wss.on('connection', (ws, request) => {
 });
 
 async function handleResetSession(ws, data) {
-    const { name, scriptPath } = data; // scriptPath é o caminho completo para o script principal
+    const { name, scriptPath } = data;
     const sendProgress = (message) => {
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ type: 'progress', message: `[PAINEL] ${message}` }));
@@ -240,17 +235,13 @@ async function handleResetSession(ws, data) {
         await ssh.connect(sshConfig);
         sendProgress(`Iniciando procedimento para gerar novo QR Code para '${name}'...`);
 
-        // PASSO 1: Parar e apagar o processo da lista do PM2 para limpar a configuração antiga.
-        // Isto NÃO apaga os ficheiros do bot.
         sendProgress(`A parar e a remover o processo '${name}' do PM2 para limpar a configuração...`);
         const deleteResult = await ssh.execCommand(`${NVM_PREFIX}pm2 delete ${name}`);
-        // Ignoramos o erro se o processo não existir, o que é aceitável.
         if (deleteResult.code !== 0 && !deleteResult.stderr.includes('not found')) {
             throw new Error(`Falha ao remover o processo do PM2: ${deleteResult.stderr}`);
         }
         sendProgress(`Processo removido da lista do PM2 com sucesso.`);
         
-        // PASSO 2: Apagar a pasta de sessão para forçar a regeneração do QR Code.
         sendProgress(`A apagar a pasta de sessão .wwebjs_auth...`);
         const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth');
         const rmResult = await ssh.execCommand(`rm -rf "${sessionPath}"`);
@@ -259,7 +250,6 @@ async function handleResetSession(ws, data) {
         }
         sendProgress(`Pasta de sessão apagada.`);
 
-        // PASSO 3: Iniciar o bot novamente, mas da maneira correta, replicando os passos manuais.
         sendProgress(`A iniciar o bot novamente com o diretório de trabalho correto...`);
         const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
         const pm2Result = await ssh.execCommand(pm2Command);
@@ -274,7 +264,6 @@ async function handleResetSession(ws, data) {
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
         sendProgress(`Ocorreu um erro. A tentar restaurar o bot...`);
-        // Tenta iniciar o bot novamente em caso de falha.
         const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
         await ssh.execCommand(pm2Command).catch((err)=>{
              sendProgress(`AVISO: Não foi possível restaurar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);

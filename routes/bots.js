@@ -1,6 +1,6 @@
-// ARQUIVO: routes/bots.js (COMPLETO E CORRIGIDO - V4)
+// ARQUIVO: routes/bots.js (VERSÃO FINAL E CORRIGIDA - V5)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 4.0 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 5.0 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -8,9 +8,6 @@ const path = require('path');
 const notificationService = require('../services/notificationService');
 
 const router = express.Router();
-
-// ### CORREÇÃO ###
-// Criamos uma instância do parser de JSON para ser usada individualmente nas rotas.
 const jsonParser = express.json();
 
 const sshConfig = {
@@ -209,6 +206,30 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
 
 // #################### ROTAS DE NOTIFICAÇÕES ####################
 
+// ### CORREÇÃO DE ORDEM ###
+// A rota específica '/test' foi movida para ANTES da rota com parâmetro '/:name'.
+router.post('/bots/notifications/test', jsonParser, async (req, res) => {
+    console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
+    console.log(`[BCP DEBUG] Corpo da requisição (processado):`, req.body);
+
+    const { token, chatId, message } = req.body;
+
+    if (!token || !chatId) {
+        console.error(`[BCP ERROR] Falha na validação. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
+        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
+    }
+
+    try {
+        console.log(`[BCP DEBUG] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
+        await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
+        console.log(`[BCP INFO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
+        res.json({ message: 'Mensagem de teste enviada com sucesso!' });
+    } catch (error) {
+        console.error(`[BCP ERROR] Falha ao enviar mensagem de teste para o Chat ID ${chatId}. Erro: ${error.message}`);
+        res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
+    }
+});
+
 router.get('/bots/notifications/:name', async (req, res) => {
     const { name } = req.params;
     const { scriptPath } = req.query;
@@ -274,28 +295,6 @@ router.post('/bots/notifications/:name', jsonParser, async (req, res) => {
         res.status(500).json({ error: `Falha ao salvar a notificação. Detalhe: ${error.message}` });
     } finally {
         if (ssh.connection) ssh.dispose();
-    }
-});
-
-router.post('/bots/notifications/test', jsonParser, async (req, res) => {
-    console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
-    console.log(`[BCP DEBUG] Corpo da requisição (processado):`, req.body);
-
-    const { token, chatId, message } = req.body;
-
-    if (!token || !chatId) {
-        console.error(`[BCP ERROR] Falha na validação. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
-        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
-    }
-
-    try {
-        console.log(`[BCP DEBUG] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
-        await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
-        console.log(`[BCP INFO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
-        res.json({ message: 'Mensagem de teste enviada com sucesso!' });
-    } catch (error) {
-        console.error(`[BCP ERROR] Falha ao enviar mensagem de teste para o Chat ID ${chatId}. Erro: ${error.message}`);
-        res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
 
