@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (COMPLETO E COM VERIFICADOR DE REQUISIÇÃO - V3)
+// ARQUIVO: server.js (COMPLETO E CORRIGIDO - V4)
 
 require('dotenv').config();
 const express = require('express');
@@ -43,24 +43,10 @@ const checkAuth = (req, res, next) => {
     res.redirect('/');
 };
 
-// ### PASSO DE DEPURAÇÃO ADICIONADO ###
-// O middleware express.json() agora tem um "verificador".
-// Ele irá capturar o corpo da requisição ANTES de o tentar processar como JSON.
-// Isto vai-nos mostrar exatamente o que o servidor está a receber.
-app.use(express.json({
-    limit: '10mb',
-    verify: (req, res, buf, encoding) => {
-        try {
-            // Guardamos o corpo "raw" na requisição para podermos logá-lo mais tarde.
-            if (buf && buf.length) {
-                req.rawBody = buf.toString(encoding);
-                console.log(`[BCP VERIFY] Corpo RAW recebido para ${req.method} ${req.originalUrl}:`, req.rawBody);
-            }
-        } catch (e) {
-            console.error("[BCP ERROR] Falha ao processar o corpo raw da requisição no verificador:", e);
-        }
-    }
-}));
+// ### CORREÇÃO ###
+// O middleware express.json() foi removido daqui para ser colocado
+// diretamente no ficheiro de rotas (routes/bots.js).
+// Isto garante que ele é aplicado apenas onde é necessário e evita conflitos.
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -75,7 +61,7 @@ app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', express.json(), (req, res) => { // Adicionado parser aqui para a rota de login
     const { username, password } = req.body;
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
         return res.status(500).json({ error: 'As credenciais de administrador não estão configuradas no servidor.' });

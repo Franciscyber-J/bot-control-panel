@@ -1,10 +1,6 @@
-// ARQUIVO: routes/bots.js (COMPLETO E COM LOGS ADICIONADOS - V2)
+// ARQUIVO: routes/bots.js (COMPLETO E COM PARSER LOCAL - V3)
 
-// ### PASSO DE DEPURAÇÃO ADICIONADO ###
-// Este log confirma que o Node.js está a carregar este ficheiro específico.
-// Se esta mensagem não aparecer quando você reiniciar o servidor, o ficheiro antigo ainda está em uso.
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 2.0 ---');
-
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 3.0 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -12,6 +8,12 @@ const path = require('path');
 const notificationService = require('../services/notificationService');
 
 const router = express.Router();
+
+// ### CORREÇÃO ###
+// Adicionamos o middleware express.json() aqui.
+// Ele irá processar o corpo de todas as requisições que chegarem a este router.
+router.use(express.json());
+
 
 const sshConfig = {
     host: process.env.SSH_HOST,
@@ -277,10 +279,10 @@ router.post('/bots/notifications/:name', async (req, res) => {
     }
 });
 
-// ROTA COM LOGS ADICIONADOS
 router.post('/bots/notifications/test', async (req, res) => {
+    // Agora que o parser está neste ficheiro, o req.body deve estar disponível.
     console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
-    console.log(`[BCP DEBUG] Corpo da requisição recebido:`, req.body);
+    console.log(`[BCP DEBUG] Corpo da requisição (já processado):`, req.body);
 
     const { token, chatId, message } = req.body;
 
