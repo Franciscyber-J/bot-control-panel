@@ -1,6 +1,6 @@
-// ARQUIVO: routes/bots.js (VERSÃO FINAL E CORRIGIDA - V5)
+// ARQUIVO: routes/bots.js (COM GESTÃO DE USUÁRIOS)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 5.0 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 6.0 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -206,26 +206,15 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
 
 // #################### ROTAS DE NOTIFICAÇÕES ####################
 
-// ### CORREÇÃO DE ORDEM ###
-// A rota específica '/test' foi movida para ANTES da rota com parâmetro '/:name'.
 router.post('/bots/notifications/test', jsonParser, async (req, res) => {
-    console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
-    console.log(`[BCP DEBUG] Corpo da requisição (processado):`, req.body);
-
     const { token, chatId, message } = req.body;
-
     if (!token || !chatId) {
-        console.error(`[BCP ERROR] Falha na validação. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
         return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
     }
-
     try {
-        console.log(`[BCP DEBUG] A tentar enviar mensagem de teste para o Chat ID: ${chatId}`);
         await notificationService.sendTestMessage(token, chatId, message || 'Mensagem de teste do Painel de Controlo de Bots.');
-        console.log(`[BCP INFO] Mensagem de teste enviada com sucesso para o Chat ID: ${chatId}`);
         res.json({ message: 'Mensagem de teste enviada com sucesso!' });
     } catch (error) {
-        console.error(`[BCP ERROR] Falha ao enviar mensagem de teste para o Chat ID ${chatId}. Erro: ${error.message}`);
         res.status(500).json({ error: `Falha ao enviar mensagem de teste. Detalhe: ${error.message}` });
     }
 });
@@ -297,6 +286,43 @@ router.post('/bots/notifications/:name', jsonParser, async (req, res) => {
         if (ssh.connection) ssh.dispose();
     }
 });
+
+// ### NOVA ROTA PARA REMOVER NOTIFICAÇÃO ###
+router.delete('/bots/notifications/:name/:notificationId', async (req, res) => {
+    const { name, notificationId } = req.params;
+    const { scriptPath } = req.query;
+    if (!name || !scriptPath || !notificationId) return res.status(400).json({ error: 'Dados incompletos para remoção.' });
+
+    const botDirectory = path.posix.dirname(scriptPath);
+    const envPath = path.posix.join(botDirectory, '.env');
+    const ssh = new NodeSSH();
+
+    try {
+        await ssh.connect(sshConfig);
+        await ssh.execCommand(`cp "${envPath}" "${envPath}.bak"`).catch(() => console.log('Backup do .env não pôde ser criado.'));
+        
+        const envContentResult = await ssh.execCommand(`cat "${envPath}"`);
+        if (envContentResult.code !== 0) throw new Error('Não foi possível ler o ficheiro .env para remover a notificação.');
+
+        let envContent = notificationService.removeNotificationFromEnv(envContentResult.stdout, notificationId);
+
+        const base64Content = Buffer.from(envContent).toString('base64');
+        await ssh.execCommand(`echo ${base64Content} | base64 --decode > "${envPath}"`);
+
+        const reloadCommand = `${NVM_PREFIX}pm2 reload "${name}"`;
+        await ssh.execCommand(reloadCommand);
+
+        res.json({ message: 'Notificação removida e bot reiniciado com sucesso.' });
+        if (router.broadcastStatus) await router.broadcastStatus();
+
+    } catch (error) {
+        await ssh.execCommand(`cp "${envPath}.bak" "${envPath}"`).catch(() => {});
+        res.status(500).json({ error: `Falha ao remover a notificação. Detalhe: ${error.message}` });
+    } finally {
+        if (ssh.connection) ssh.dispose();
+    }
+});
+
 
 router.post('/bots/inject-notifier/:name', jsonParser, async (req, res) => {
     const { name } = req.params;

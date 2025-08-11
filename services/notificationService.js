@@ -1,12 +1,8 @@
-// ARQUIVO: services/notificationService.js (COM LÓGICA DE FINALIDADE)
+// ARQUIVO: services/notificationService.js (COM GESTÃO DE USUÁRIOS)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 
-/**
- * Parsea o conteúdo de um ficheiro .env para encontrar as configurações de notificação.
- * Agora inclui o campo "purpose".
- */
 function parseNotifications(envContent) {
     const notifications = {};
     const lines = envContent.split('\n');
@@ -30,7 +26,6 @@ function parseNotifications(envContent) {
             if (!notifications[id]) notifications[id] = { id };
             notifications[id].chatId = matchChatId[2];
         }
-        // ### NOVO PARSER ADICIONADO ###
         const matchPurpose = line.match(/^TELEGRAM_PURPOSE_(\d+)="?([^"]+)"?$/);
         if (matchPurpose) {
             const id = matchPurpose[1];
@@ -39,12 +34,9 @@ function parseNotifications(envContent) {
         }
     });
 
-    return Object.values(notifications).filter(n => n.id && n.name && n.token && n.chatId && n.purpose);
+    return Object.values(notifications).filter(n => n.id && n.name && n.token && n.chatId);
 }
 
-/**
- * Atualiza ou adiciona uma notificação, agora incluindo o campo "purpose".
- */
 function updateEnvFile(currentEnvContent, updatedNotification) {
     const existingNotifications = parseNotifications(currentEnvContent);
     const notificationIndex = existingNotifications.findIndex(n => n.id == updatedNotification.id);
@@ -54,6 +46,17 @@ function updateEnvFile(currentEnvContent, updatedNotification) {
         existingNotifications.push(updatedNotification);
     }
     
+    return generateNewEnvContent(currentEnvContent, existingNotifications);
+}
+
+// ### NOVA FUNÇÃO PARA REMOVER NOTIFICAÇÃO ###
+function removeNotificationFromEnv(currentEnvContent, notificationIdToRemove) {
+    let existingNotifications = parseNotifications(currentEnvContent);
+    existingNotifications = existingNotifications.filter(n => n.id != notificationIdToRemove);
+    return generateNewEnvContent(currentEnvContent, existingNotifications);
+}
+
+function generateNewEnvContent(currentEnvContent, notifications) {
     let otherLines = currentEnvContent.split('\n').filter(line => 
         !line.startsWith('TELEGRAM_NAME_') &&
         !line.startsWith('TELEGRAM_TOKEN_') &&
@@ -64,7 +67,7 @@ function updateEnvFile(currentEnvContent, updatedNotification) {
     otherLines = otherLines.filter(line => line.trim() !== '' && !line.trim().startsWith('#') || line.includes('='));
     
     let newEnvContent = otherLines.join('\n');
-    if (newEnvContent.length > 0) {
+    if (newEnvContent.length > 0 && !newEnvContent.endsWith('\n\n')) {
         newEnvContent += '\n\n';
     }
     
@@ -73,9 +76,9 @@ function updateEnvFile(currentEnvContent, updatedNotification) {
     newEnvContent += `# (Gerado e gerido automaticamente pelo Painel de Controlo)\n`;
     newEnvContent += `# ==========================================================\n\n`;
 
-    existingNotifications.forEach(notif => {
+    notifications.forEach(notif => {
         newEnvContent +=`TELEGRAM_NAME_${notif.id}="${notif.name}"\n`;
-        newEnvContent +=`TELEGRAM_PURPOSE_${notif.id}="${notif.purpose}"\n`; // ### NOVA LINHA ADICIONADA ###
+        newEnvContent +=`TELEGRAM_PURPOSE_${notif.id}="${notif.purpose || ''}"\n`;
         newEnvContent +=`TELEGRAM_TOKEN_${notif.id}="${notif.token}"\n`;
         newEnvContent +=`TELEGRAM_CHAT_ID_${notif.id}="${notif.chatId}"\n\n`;
     });
@@ -83,9 +86,7 @@ function updateEnvFile(currentEnvContent, updatedNotification) {
     return newEnvContent.trim() + '\n';
 }
 
-/**
- * Gera o conteúdo do ficheiro `telegramNotifier.js`, agora baseado em finalidades.
- */
+
 function getNotifierContent() {
     return `
 // Ficheiro gerado automaticamente pelo Bot Control Panel - NÃO EDITE MANUALMENTE
@@ -95,7 +96,6 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const botsByPurpose = {};
 
-// Lê todas as variáveis de ambiente TELEGRAM_* e inicializa os bots por finalidade
 Object.keys(process.env).forEach(key => {
     const matchPurpose = key.match(/^TELEGRAM_PURPOSE_(\\d+)$/);
     if (matchPurpose) {
@@ -139,9 +139,6 @@ module.exports = { sendNotification };
 `;
 }
 
-/**
- * Garante que o ficheiro do notificador e a sua injeção no bot principal existem.
- */
 async function injectNotifier(ssh, scriptPath) {
     const botDirectory = path.dirname(scriptPath);
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
@@ -170,9 +167,6 @@ async function injectNotifier(ssh, scriptPath) {
     }
 }
 
-/**
- * Envia uma mensagem de teste diretamente.
- */
 async function sendTestMessage(token, chatId, message) {
     try {
         const bot = new TelegramBot(token);
@@ -183,4 +177,4 @@ async function sendTestMessage(token, chatId, message) {
     }
 }
 
-module.exports = { parseNotifications, updateEnvFile, getNotifierContent, injectNotifier, sendTestMessage };
+module.exports = { parseNotifications, updateEnvFile, getNotifierContent, injectNotifier, sendTestMessage, removeNotificationFromEnv };

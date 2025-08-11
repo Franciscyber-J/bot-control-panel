@@ -140,11 +140,10 @@
             <form id="edit-notification-form">
                 <input type="hidden" id="notification-id">
                 <div class="form-group">
-                    <label for="notification-name">Nome da Notificação (para sua identificação)</label>
+                    <label for="notification-name">Nome do Usuário / Canal (para sua identificação)</label>
                     <input type="text" id="notification-name" required>
                 </div>
 
-                <!-- ### CAMPO NOVO ADICIONADO ### -->
                 <div class="form-group">
                     <label for="notification-purpose">Finalidade (Identificador usado no código)</label>
                     <input type="text" id="notification-purpose" placeholder="ex: alerta_novo_lead" required>
@@ -178,7 +177,7 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO - V6 (FINALIDADE) ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO - V7 (GESTÃO DE USUÁRIOS) ##########
 
     let currentLogSocket = null;
     let currentBotForNotifications = null;
@@ -401,6 +400,13 @@
                                 title="Editar">
                             <i data-feather="edit"></i> Editar
                         </button>
+                        <!-- ### NOVO BOTÃO DE REMOVER ### -->
+                        <button class="action-btn-footer danger delete-notification-btn" 
+                                data-notification-id="${notif.id}"
+                                data-notification-name="${notif.name.replace(/"/g, '&quot;')}"
+                                title="Remover">
+                            <i data-feather="trash-2"></i> Remover
+                        </button>
                     </div>
                 </div>`;
             }).join('');
@@ -456,6 +462,24 @@
             showNotification('Sucesso', result.message);
         } catch (error) {
             showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
+        }
+    }
+
+    // ### NOVA FUNÇÃO PARA REMOVER NOTIFICAÇÃO ###
+    async function deleteNotification(notificationId, notificationName) {
+        if (!currentBotForNotifications) return;
+        const { name: botName, scriptPath } = currentBotForNotifications;
+
+        const confirmed = await showConfirmation('Confirmar Remoção', `Tem a certeza que deseja remover a notificação "${notificationName}"?`);
+        if (!confirmed) return;
+
+        try {
+            const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}?scriptPath=${encodeURIComponent(scriptPath)}`;
+            const result = await fetchWithAuth(url, { method: 'DELETE' });
+            showNotification('Sucesso', result.message);
+            showNotificationManager(botName, scriptPath); // Atualiza a lista
+        } catch (error) {
+            showNotification('Falha ao Remover', `ERRO: ${error.message}`, 'error');
         }
     }
 
@@ -598,6 +622,11 @@
             if (button.classList.contains('edit-notification-btn')) {
                 const notificationData = JSON.parse(button.dataset.notification);
                 showEditNotificationModal(notificationData);
+            }
+            // ### NOVO EVENTO PARA REMOVER ###
+            if (button.classList.contains('delete-notification-btn')) {
+                const { notificationId, notificationName } = button.dataset;
+                deleteNotification(notificationId, notificationName);
             }
         });
 
