@@ -171,7 +171,7 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO - V2 ##########
+    // ########## SCRIPT COMPLETO E CORRIGIDO - V4 ##########
 
     // --- Variáveis Globais ---
     let currentLogSocket = null;
@@ -200,17 +200,36 @@
         });
     }
 
+    // ### FUNÇÃO COM LOGS DE DEPURAÇÃO ADICIONADOS ###
     async function fetchWithAuth(url, options = {}) {
-        const response = await fetch(url, options);
-        if (response.status === 401) {
-            window.location.href = '/';
-            throw new Error('Não autorizado');
+        console.log(`[CLIENT DEBUG] A iniciar fetch para: ${url}`, options);
+        try {
+            const response = await fetch(url, options);
+            console.log(`[CLIENT DEBUG] Resposta recebida. Status: ${response.status}`);
+
+            if (response.status === 401) {
+                console.warn('[CLIENT DEBUG] Não autorizado (401). A redirecionar para o login.');
+                window.location.href = '/';
+                throw new Error('Não autorizado');
+            }
+
+            const responseBody = await response.json().catch(err => {
+                console.error('[CLIENT DEBUG] Falha ao processar a resposta como JSON.', err);
+                return { error: 'A resposta do servidor não é um JSON válido.' };
+            });
+
+            console.log('[CLIENT DEBUG] Corpo da resposta (JSON):', responseBody);
+
+            if (!response.ok) {
+                console.error(`[CLIENT DEBUG] A resposta não foi OK (${response.status}). Erro:`, responseBody.error);
+                throw new Error(responseBody.error || `Falha na requisição com status ${response.status}`);
+            }
+
+            return responseBody;
+        } catch (error) {
+            console.error(`[CLIENT DEBUG] Erro catastrófico na função fetchWithAuth para ${url}:`, error);
+            throw error; // Re-lança o erro para ser tratado pela função que chamou
         }
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
-            throw new Error(errorData.error);
-        }
-        return response.json();
     }
     
     // --- Lógica de Gestão de Bots ---
@@ -435,14 +454,10 @@
     }
 
     async function testNotification(name, token, chatId) {
-        // ### PASSO DE DEPURAÇÃO ADICIONADO ###
-        // Mostra um alerta com os dados que estão a ser enviados.
-        const debugMessage = `A enviar para o servidor:\n\nNome: ${name}\nToken: ${token}\nChat ID: ${chatId}`;
-        showNotification('Dados de Depuração (Cliente)', debugMessage);
+        console.log(`[CLIENT DEBUG] A preparar para testar notificação:`, { name, token, chatId });
         
         if (!token || !chatId) {
-            // Este alerta é redundante por causa do de cima, mas é uma segurança extra.
-            showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Por favor, edite a notificação e verifique os dados.', 'error');
+            showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Verifique os dados.', 'error');
             return;
         }
 

@@ -1,6 +1,6 @@
-// ARQUIVO: routes/bots.js (COMPLETO E COM PARSER LOCAL - V3)
+// ARQUIVO: routes/bots.js (COMPLETO E CORRIGIDO - V4)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 3.0 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 4.0 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -10,10 +10,8 @@ const notificationService = require('../services/notificationService');
 const router = express.Router();
 
 // ### CORREÇÃO ###
-// Adicionamos o middleware express.json() aqui.
-// Ele irá processar o corpo de todas as requisições que chegarem a este router.
-router.use(express.json());
-
+// Criamos uma instância do parser de JSON para ser usada individualmente nas rotas.
+const jsonParser = express.json();
 
 const sshConfig = {
     host: process.env.SSH_HOST,
@@ -27,7 +25,7 @@ const BASE_BOT_PATH = process.env.BASE_BOT_PATH || '/root';
 
 // #################### ROTAS DE GESTÃO DE BOTS ####################
 
-router.post('/bots/add-from-git', async (req, res) => {
+router.post('/bots/add-from-git', jsonParser, async (req, res) => {
     const { gitUrl, name, envContent } = req.body;
     if (!gitUrl || !name || !envContent) {
         return res.status(400).json({ error: 'URL do Git, Nome do Bot e Ficheiro .env são obrigatórios.' });
@@ -88,7 +86,7 @@ router.post('/bots/add-from-git', async (req, res) => {
     }
 });
 
-router.post('/bots/manage', async (req, res) => {
+router.post('/bots/manage', jsonParser, async (req, res) => {
     const { name, action } = req.body;
     if (!name || !['restart', 'stop', 'start'].includes(action)) {
         return res.status(400).json({ error: 'Ação ou nome de bot inválido.' });
@@ -110,7 +108,7 @@ router.post('/bots/manage', async (req, res) => {
     }
 });
 
-router.post('/bots/env/:name', async (req, res) => {
+router.post('/bots/env/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { content, scriptPath } = req.body;
     if (!name || !content || !scriptPath) return res.status(400).json({ error: 'Faltam dados essenciais.' });
@@ -173,7 +171,7 @@ router.get('/bots/logs/:name', async (req, res) => {
     }
 });
 
-router.post('/bots/update/:name', async (req, res) => {
+router.post('/bots/update/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { scriptPath, gitUrl } = req.body;
     if (!name || !scriptPath || !gitUrl) return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
@@ -242,7 +240,7 @@ router.get('/bots/notifications/:name', async (req, res) => {
     }
 });
 
-router.post('/bots/notifications/:name', async (req, res) => {
+router.post('/bots/notifications/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { scriptPath, notification } = req.body;
     if (!name || !scriptPath || !notification) return res.status(400).json({ error: 'Dados incompletos.' });
@@ -279,16 +277,15 @@ router.post('/bots/notifications/:name', async (req, res) => {
     }
 });
 
-router.post('/bots/notifications/test', async (req, res) => {
-    // Agora que o parser está neste ficheiro, o req.body deve estar disponível.
+router.post('/bots/notifications/test', jsonParser, async (req, res) => {
     console.log(`[BCP DEBUG] Rota /api/bots/notifications/test foi atingida.`);
-    console.log(`[BCP DEBUG] Corpo da requisição (já processado):`, req.body);
+    console.log(`[BCP DEBUG] Corpo da requisição (processado):`, req.body);
 
     const { token, chatId, message } = req.body;
 
     if (!token || !chatId) {
-        console.error(`[BCP ERROR] Falha na validação da rota de teste. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
-        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor. Verifique os dados no cliente e a requisição.' });
+        console.error(`[BCP ERROR] Falha na validação. Token ou Chat ID em falta.`, { token: !!token, chatId: !!chatId });
+        return res.status(400).json({ error: 'Token ou Chat ID não recebidos pelo servidor.' });
     }
 
     try {
@@ -302,7 +299,7 @@ router.post('/bots/notifications/test', async (req, res) => {
     }
 });
 
-router.post('/bots/inject-notifier/:name', async (req, res) => {
+router.post('/bots/inject-notifier/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { scriptPath } = req.body;
     if (!name || !scriptPath) return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
