@@ -1,7 +1,10 @@
-// ARQUIVO: services/notificationService.js (VERSÃO FINAL E MAIS ROBUSTA)
+// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE NVM)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
+
+// Prefixo para garantir que o ambiente NVM seja carregado na sessão SSH
+const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
 
 function parseNotifications(envContent) {
     const notifications = {};
@@ -143,14 +146,15 @@ async function injectNotifier(ssh, scriptPath) {
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
-    // ### COMANDO MELHORADO ###
-    // Garante que as dependências para o notificador estejam sempre instaladas no bot.
-    // Lança um erro se a instalação falhar.
+    // ### CORREÇÃO APLICADA AQUI ###
+    // Adicionamos o NVM_PREFIX para garantir que o comando 'npm' seja encontrado.
     console.log(`[PAINEL] A garantir que as dependências de notificação existem em ${botDirectory}...`);
-    const installResult = await ssh.execCommand(`npm install --prefix "${botDirectory}" node-telegram-bot-api dotenv`);
+    const installCommand = `${NVM_PREFIX}npm install --prefix "${botDirectory}" node-telegram-bot-api dotenv`;
+    const installResult = await ssh.execCommand(installCommand);
+    
     if (installResult.code !== 0) {
         console.error(`[PAINEL] Falha ao instalar dependências de notificação:`, installResult.stderr);
-        throw new Error(`Falha ao executar 'npm install' para as dependências de notificação. Verifique os logs do painel.`);
+        throw new Error(`Falha ao executar 'npm install' para as dependências de notificação. Detalhe: ${installResult.stderr}`);
     }
     console.log(`[PAINEL] Dependências de notificação instaladas com sucesso.`);
 
