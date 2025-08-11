@@ -1,4 +1,4 @@
-// ARQUIVO: services/notificationService.js (COM GESTÃO DE USUÁRIOS)
+// ARQUIVO: services/notificationService.js (VERSÃO FINAL E MAIS ROBUSTA)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
@@ -49,7 +49,6 @@ function updateEnvFile(currentEnvContent, updatedNotification) {
     return generateNewEnvContent(currentEnvContent, existingNotifications);
 }
 
-// ### NOVA FUNÇÃO PARA REMOVER NOTIFICAÇÃO ###
 function removeNotificationFromEnv(currentEnvContent, notificationIdToRemove) {
     let existingNotifications = parseNotifications(currentEnvContent);
     existingNotifications = existingNotifications.filter(n => n.id != notificationIdToRemove);
@@ -144,7 +143,17 @@ async function injectNotifier(ssh, scriptPath) {
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
-    await ssh.execCommand(`npm --prefix ${botDirectory} install node-telegram-bot-api dotenv`);
+    // ### COMANDO MELHORADO ###
+    // Garante que as dependências para o notificador estejam sempre instaladas no bot.
+    // Lança um erro se a instalação falhar.
+    console.log(`[PAINEL] A garantir que as dependências de notificação existem em ${botDirectory}...`);
+    const installResult = await ssh.execCommand(`npm install --prefix "${botDirectory}" node-telegram-bot-api dotenv`);
+    if (installResult.code !== 0) {
+        console.error(`[PAINEL] Falha ao instalar dependências de notificação:`, installResult.stderr);
+        throw new Error(`Falha ao executar 'npm install' para as dependências de notificação. Verifique os logs do painel.`);
+    }
+    console.log(`[PAINEL] Dependências de notificação instaladas com sucesso.`);
+
 
     const notifierContent = getNotifierContent();
     const base64Content = Buffer.from(notifierContent).toString('base64');
