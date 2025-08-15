@@ -1,6 +1,6 @@
 // ARQUIVO: routes/bots.js (COM GESTÃO DE USUÁRIOS E ATUALIZAÇÃO DE BRANCH DINÂMICA)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 7.1 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 7.2 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -198,8 +198,6 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
         fullOutput += `> Diretório de trabalho encontrado: ${botDirectory}\n\n`;
 
         fullOutput += `> Verificando a branch principal do repositório...\n`;
-        // ### CORREÇÃO DEFINITIVA APLICADA AQUI ###
-        // Este comando é mais robusto para obter a branch padrão (main/master).
         const findBranchCmd = `git -C "${botDirectory}" symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`;
         const findBranchResult = await ssh.execCommand(findBranchCmd);
 
@@ -354,18 +352,46 @@ router.delete('/bots/notifications/:name/:notificationId', async (req, res) => {
     }
 });
 
-
+// ### ROTA DE INJEÇÃO DE CÓDIGO CORRIGIDA ###
 router.post('/bots/inject-notifier/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
-    const { scriptPath } = req.body;
-    if (!name || !scriptPath) return res.status(400).json({ error: 'Nome do bot e caminho do script são obrigatórios.' });
+    if (!name) {
+        return res.status(400).json({ error: 'Nome do bot é obrigatório.' });
+    }
 
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
+
+        // 1. Obter info do bot a partir do PM2 para garantir os caminhos corretos
+        const pm2ListResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
+        if (pm2ListResult.code !== 0 || !pm2ListResult.stdout) {
+            throw new Error(`Falha ao obter a lista de processos do PM2: ${pm2ListResult.stderr}`);
+        }
+        const bots = JSON.parse(pm2ListResult.stdout);
+        const botInfo = bots.find(b => b.name === name);
+        if (!botInfo || !botInfo.pm2_env || !botInfo.pm2_env.pm_cwd) {
+            throw new Error(`Não foi possível encontrar o diretório de trabalho (pm_cwd) para o bot '${name}' no PM2.`);
+        }
+        const botDirectory = botInfo.pm2_env.pm_cwd;
+
+        // 2. Determinar o script principal a partir do package.json
+        const packageJsonPath = path.posix.join(botDirectory, 'package.json');
+        const catResult = await ssh.execCommand(`cat "${packageJsonPath}"`);
+        if (catResult.code !== 0) {
+            throw new Error(`Não foi possível ler o package.json em ${packageJsonPath}: ${catResult.stderr}`);
+        }
+        const packageJson = JSON.parse(catResult.stdout);
+        const mainScript = packageJson.main || (packageJson.scripts && packageJson.scripts.start ? packageJson.scripts.start.split(' ').pop() : null);
+        if (!mainScript) {
+            throw new Error('Não foi possível encontrar a entrada "main" ou "scripts.start" no package.json do bot.');
+        }
+        const correctScriptPath = path.posix.join(botDirectory, mainScript);
+
+        // 3. Injetar o notificador usando o caminho correto e seguro
+        await notificationService.injectNotifier(ssh, correctScriptPath);
         
-        await notificationService.injectNotifier(ssh, scriptPath);
-        
+        // 4. Reiniciar o bot
         const reloadCommand = `${NVM_PREFIX}pm2 reload "${name}"`;
         await ssh.execCommand(reloadCommand);
 
