@@ -1,6 +1,6 @@
 // ARQUIVO: routes/bots.js (COM GESTÃO DE USUÁRIOS E ATUALIZAÇÃO DE BRANCH DINÂMICA)
 
-console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 7.0 ---');
+console.log('--- [BCP INFO] Ficheiro routes/bots.js carregado. Versão: 7.1 ---');
 
 const express = require('express');
 const { NodeSSH } = require('node-ssh');
@@ -168,7 +168,6 @@ router.get('/bots/logs/:name', async (req, res) => {
     }
 });
 
-// #################### ROTA DE ATUALIZAÇÃO CORRIGIDA ####################
 router.post('/bots/update/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
     const { gitUrl } = req.body;
@@ -199,10 +198,13 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
         fullOutput += `> Diretório de trabalho encontrado: ${botDirectory}\n\n`;
 
         fullOutput += `> Verificando a branch principal do repositório...\n`;
-        const findBranchCmd = `git -C "${botDirectory}" remote show origin | grep 'HEAD branch' | cut -d' ' -f4`;
+        // ### CORREÇÃO DEFINITIVA APLICADA AQUI ###
+        // Este comando é mais robusto para obter a branch padrão (main/master).
+        const findBranchCmd = `git -C "${botDirectory}" symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`;
         const findBranchResult = await ssh.execCommand(findBranchCmd);
+
         if (findBranchResult.code !== 0 || !findBranchResult.stdout.trim()) {
-            throw new Error(`Não foi possível determinar a branch principal. Verifique o repositório. Saída: ${findBranchResult.stderr}`);
+            throw new Error(`Não foi possível determinar a branch principal. Verifique o repositório e se ele tem commits. Saída: ${findBranchResult.stderr}`);
         }
         const mainBranch = findBranchResult.stdout.trim();
         fullOutput += `> Branch principal encontrada: ${mainBranch}\n\n`;
