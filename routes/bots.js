@@ -168,25 +168,41 @@ router.get('/bots/logs/:name', async (req, res) => {
     }
 });
 
+// #################### ROTA DE ATUALIZAÇÃO CORRIGIDA ####################
 router.post('/bots/update/:name', jsonParser, async (req, res) => {
     const { name } = req.params;
-    const { scriptPath, gitUrl } = req.body;
-    if (!name || !scriptPath || !gitUrl) {
-        return res.status(400).json({ error: 'Nome, caminho do script e URL do Git são obrigatórios.' });
+    const { gitUrl } = req.body;
+    if (!name || !gitUrl) {
+        return res.status(400).json({ error: 'Nome do bot e URL do Git são obrigatórios.' });
     }
 
-    const botDirectory = path.posix.dirname(scriptPath);
     const ssh = new NodeSSH();
     try {
         await ssh.connect(sshConfig);
         
         let fullOutput = `Iniciando deploy para o bot '${name}' a partir de ${gitUrl}...\n\n`;
 
+        fullOutput += `> Buscando informações do processo no PM2...\n`;
+        const pm2ListResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
+        if (pm2ListResult.code !== 0 || !pm2ListResult.stdout) {
+            throw new Error(`Falha ao obter a lista de processos do PM2: ${pm2ListResult.stderr}`);
+        }
+        
+        const bots = JSON.parse(pm2ListResult.stdout);
+        const botInfo = bots.find(b => b.name === name);
+
+        if (!botInfo || !botInfo.pm2_env || !botInfo.pm2_env.pm_cwd) {
+            throw new Error(`Não foi possível encontrar o diretório de trabalho (pm_cwd) para o bot '${name}' no PM2.`);
+        }
+        
+        const botDirectory = botInfo.pm2_env.pm_cwd;
+        fullOutput += `> Diretório de trabalho encontrado: ${botDirectory}\n\n`;
+
         fullOutput += `> Verificando a branch principal do repositório...\n`;
         const findBranchCmd = `git -C "${botDirectory}" remote show origin | grep 'HEAD branch' | cut -d' ' -f4`;
         const findBranchResult = await ssh.execCommand(findBranchCmd);
         if (findBranchResult.code !== 0 || !findBranchResult.stdout.trim()) {
-            throw new Error(`Não foi possível determinar a branch principal (main/master). Verifique o repositório. Saída: ${findBranchResult.stderr}`);
+            throw new Error(`Não foi possível determinar a branch principal. Verifique o repositório. Saída: ${findBranchResult.stderr}`);
         }
         const mainBranch = findBranchResult.stdout.trim();
         fullOutput += `> Branch principal encontrada: ${mainBranch}\n\n`;
@@ -216,6 +232,7 @@ router.post('/bots/update/:name', jsonParser, async (req, res) => {
         if (ssh.connection) ssh.dispose();
     }
 });
+
 
 // #################### ROTAS DE NOTIFICAÇÕES ####################
 
