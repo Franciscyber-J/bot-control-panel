@@ -184,7 +184,7 @@
     </div>
 
 <script>
-    // SCRIPT COMPLETO E CORRIGIDO - V8 (INDICADOR DE LOADING)
+    // SCRIPT COMPLETO E CORRIGIDO - V9 (LEITURA DE FINALIDADES)
 
     let currentLogSocket = null;
     let currentBotForNotifications = null;
@@ -284,7 +284,7 @@
         currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
     }
 
-    function showUpdateModal(name, scriptPath) {
+    function showUpdateModal(name) {
         const modal = document.getElementById('update-source-modal');
         const form = document.getElementById('update-source-form');
         const gitUrlInput = document.getElementById('bot-git-url');
@@ -302,14 +302,14 @@
             const gitUrl = gitUrlInput.value;
             modal.style.display = 'none';
             
-            await updateBot(name, scriptPath, gitUrl);
+            await updateBot(name, gitUrl);
 
             submitButton.disabled = false;
             submitButton.innerHTML = originalButtonText;
         };
     }
 
-    async function updateBot(name, scriptPath, gitUrl) {
+    async function updateBot(name, gitUrl) {
         const modal = document.getElementById('update-modal');
         const title = document.getElementById('update-modal-title');
         const content = document.getElementById('update-content');
@@ -319,7 +319,7 @@
 
         try {
             const result = await fetchWithAuth(`/api/bots/update/${name}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath, gitUrl })
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gitUrl })
             });
             content.textContent = result.output;
         } catch (error) {
@@ -327,7 +327,7 @@
         }
     }
 
-    async function uploadEnvFile(name, scriptPath) {
+    async function uploadEnvFile(name) {
         const fileInput = document.getElementById('env-file-input');
         fileInput.onchange = async (event) => {
             const file = event.target.files[0];
@@ -340,7 +340,7 @@
             reader.onload = async (e) => {
                 try {
                     const result = await fetchWithAuth(`/api/bots/env/${name}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result, scriptPath })
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result })
                     });
                     showNotification('Sucesso', result.message);
                 } catch (error) {
@@ -354,7 +354,7 @@
         fileInput.click();
     }
     
-    async function resetBotSession(botName, scriptPath) {
+    async function resetBotSession(botName) {
         const confirmed = await showConfirmation(
             'Adicionar Novo Número', 
             `Tem a certeza que deseja desconectar o aparelho atual do bot <b>${botName}</b>?\n\nEsta ação irá apagar os dados da sessão guardada, forçar a geração de um novo QR Code e reiniciar o bot.`
@@ -366,15 +366,15 @@
         if (dashboardSocket && dashboardSocket.readyState === WebSocket.OPEN) {
             dashboardSocket.send(JSON.stringify({
                 type: 'resetSession',
-                data: { name: botName, scriptPath }
+                data: { name: botName }
             }));
         } else {
             showNotification('Erro', 'A conexão com o painel não está ativa. Por favor, atualize a página.', 'error');
         }
     }
     
-    async function showNotificationManager(botName, scriptPath) {
-        currentBotForNotifications = { name: botName, scriptPath };
+    async function showNotificationManager(botName) {
+        currentBotForNotifications = { name: botName };
         const modal = document.getElementById('notification-manager-modal');
         const title = document.getElementById('notification-manager-title');
         const container = document.getElementById('notification-list-container');
@@ -383,20 +383,31 @@
         modal.style.display = 'flex';
 
         try {
-            const url = `/api/bots/notifications/${encodeURIComponent(botName)}?scriptPath=${encodeURIComponent(scriptPath)}`;
+            const url = `/api/bots/notifications/${encodeURIComponent(botName)}`;
             const data = await fetchWithAuth(url);
-            renderNotificationList(data.notifications, data.notifierInjected);
+            renderNotificationList(data.notifications, data.notifierInjected, data.foundPurposes);
         } catch (error) {
             container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`;
         }
     }
 
-    function renderNotificationList(notifications = [], notifierInjected) {
+    // ### FUNÇÃO ATUALIZADA PARA MOSTRAR AS FINALIDADES ENCONTRADAS ###
+    function renderNotificationList(notifications = [], notifierInjected, foundPurposes = []) {
         const container = document.getElementById('notification-list-container');
+        let html = '';
+
+        if (foundPurposes.length > 0) {
+            html += `<div class="info-message"><strong>Finalidades encontradas no código:</strong><br><small>Use um destes nomes no campo "Finalidade" para garantir o funcionamento.</small><div class="purpose-list">`;
+            foundPurposes.forEach(purpose => {
+                html += `<code>${purpose}</code>`;
+            });
+            html += '</div></div>';
+        }
+
         if (notifications.length === 0) {
-            container.innerHTML = '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+            html += '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
         } else {
-            container.innerHTML = notifications.map(notif => {
+            html += notifications.map(notif => {
                 const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
                 return `
                 <div class="notification-item">
@@ -428,8 +439,8 @@
             }).join('');
         }
         
-        if (!notifierInjected && notifications.length > 0) {
-            container.innerHTML += `
+        if (!notifierInjected && (notifications.length > 0 || foundPurposes.length > 0)) {
+            html += `
                 <div class="info-message warning">
                     <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
                     <button class="action-btn primary" onclick="injectNotifierCode()">
@@ -437,6 +448,7 @@
                     </button>
                 </div>`;
         }
+        container.innerHTML = html;
         feather.replace();
     }
 
@@ -484,16 +496,16 @@
 
     async function deleteNotification(notificationId, notificationName) {
         if (!currentBotForNotifications) return;
-        const { name: botName, scriptPath } = currentBotForNotifications;
+        const { name: botName } = currentBotForNotifications;
 
         const confirmed = await showConfirmation('Confirmar Remoção', `Tem a certeza que deseja remover a notificação "${notificationName}"?`);
         if (!confirmed) return;
 
         try {
-            const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}?scriptPath=${encodeURIComponent(scriptPath)}`;
+            const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}`;
             const result = await fetchWithAuth(url, { method: 'DELETE' });
             showNotification('Sucesso', result.message);
-            showNotificationManager(botName, scriptPath);
+            showNotificationManager(botName);
         } catch (error) {
             showNotification('Falha ao Remover', `ERRO: ${error.message}`, 'error');
         }
@@ -501,17 +513,17 @@
 
     async function injectNotifierCode() {
         if (!currentBotForNotifications) return;
-        const { name, scriptPath } = currentBotForNotifications;
-        const filename = scriptPath.split(/[\\/]/).pop();
-        const confirmed = await showConfirmation('Confirmar Correção Automática', `Isto irá adicionar a linha de código necessária no topo do ficheiro <b>${filename}</b> e reiniciar o bot <b>${name}</b>.\n\nDeseja continuar?`);
+        const { name } = currentBotForNotifications;
+
+        const confirmed = await showConfirmation('Confirmar Correção Automática', `Isto irá adicionar a linha de código necessária no topo do ficheiro principal do bot <b>${name}</b> e reiniciá-lo.\n\nDeseja continuar?`);
         if (!confirmed) return;
 
         try {
             const result = await fetchWithAuth(`/api/bots/inject-notifier/${name}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scriptPath })
+                method: 'POST'
             });
             showNotification('Sucesso', result.message);
-            showNotificationManager(name, scriptPath);
+            showNotificationManager(name);
         } catch (error) {
             showNotification('Falha ao Aplicar Correção', `ERRO: ${error.message}`, 'error');
         }
@@ -522,10 +534,9 @@
         const statusClass = isOnline ? 'status-online' : 'status-offline';
         const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
         const statusText = isOnline ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
-        const scriptPath = bot.pm2_env.pm_exec_path;
 
         return `
-            <div class="bot-card" data-bot-name="${bot.name}" data-script-path="${scriptPath}">
+            <div class="bot-card" data-bot-name="${bot.name}">
                 <div class="card-header">
                     <div class="card-title-group">
                         <h2>${bot.name}</h2>
@@ -613,15 +624,14 @@
             if (!button) return;
             const card = button.closest('.bot-card');
             const botName = card.dataset.botName;
-            const scriptPath = card.dataset.scriptPath;
 
             if (button.classList.contains('manage-bot-btn')) manageBot(botName, button.dataset.action);
             if (button.classList.contains('delete-bot-btn')) deleteBot(botName);
-            if (button.classList.contains('reset-session-btn')) resetBotSession(botName, scriptPath);
-            if (button.classList.contains('manage-notifications-btn')) showNotificationManager(botName, scriptPath);
-            if (button.classList.contains('upload-env-btn')) uploadEnvFile(botName, scriptPath);
+            if (button.classList.contains('reset-session-btn')) resetBotSession(botName);
+            if (button.classList.contains('manage-notifications-btn')) showNotificationManager(botName);
+            if (button.classList.contains('upload-env-btn')) uploadEnvFile(botName);
             if (button.classList.contains('show-logs-btn')) showLogs(botName);
-            if (button.classList.contains('update-source-btn')) showUpdateModal(botName, scriptPath);
+            if (button.classList.contains('update-source-btn')) showUpdateModal(botName);
         });
         
         notificationListContainer.addEventListener('click', (event) => {
@@ -735,11 +745,11 @@
                 const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ scriptPath: currentBotForNotifications.scriptPath, notification: notification }) 
+                    body: JSON.stringify({ notification: notification }) 
                 }); 
                 document.getElementById('edit-notification-modal').style.display = 'none'; 
                 showNotification('Sucesso', result.message); 
-                showNotificationManager(currentBotForNotifications.name, currentBotForNotifications.scriptPath); 
+                showNotificationManager(currentBotForNotifications.name); 
             } catch (error) { 
                 showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); 
             } finally {
