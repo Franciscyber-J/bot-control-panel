@@ -1,4 +1,4 @@
-// ARQUIVO: server.js (VERSÃO FINAL E LIMPA - V5)
+// ARQUIVO: server.js (VERSÃO FINAL E CORRIGIDA - V6)
 
 require('dotenv').config();
 const express = require('express');
@@ -56,7 +56,6 @@ app.get('/dashboard', checkAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// Adiciona o parser de JSON especificamente para as rotas que precisam dele
 app.post('/api/login', express.json(), (req, res) => {
     const { username, password } = req.body;
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
@@ -219,8 +218,9 @@ wss.on('connection', (ws, request) => {
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
+// ### FUNÇÃO handleResetSession TOTALMENTE CORRIGIDA ###
 async function handleResetSession(ws, data) {
-    const { name, scriptPath } = data;
+    const { name } = data; // Apenas o nome é necessário
     const sendProgress = (message) => {
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ type: 'progress', message: `[PAINEL] ${message}` }));
@@ -228,12 +228,34 @@ async function handleResetSession(ws, data) {
     };
     
     const ssh = new NodeSSH();
-    const botDirectory = path.posix.dirname(scriptPath);
-    const mainScript = path.posix.basename(scriptPath);
-
+    
     try {
         await ssh.connect(sshConfig);
         sendProgress(`Iniciando procedimento para gerar novo QR Code para '${name}'...`);
+        
+        // 1. Obter info do bot a partir do PM2 para garantir os caminhos corretos
+        const pm2ListResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
+        if (pm2ListResult.code !== 0 || !pm2ListResult.stdout) {
+            throw new Error(`Falha ao obter a lista de processos do PM2: ${pm2ListResult.stderr}`);
+        }
+        const bots = JSON.parse(pm2ListResult.stdout);
+        const botInfo = bots.find(b => b.name === name);
+        if (!botInfo || !botInfo.pm2_env || !botInfo.pm2_env.pm_cwd) {
+            throw new Error(`Não foi possível encontrar o diretório de trabalho (pm_cwd) para o bot '${name}' no PM2.`);
+        }
+        const botDirectory = botInfo.pm2_env.pm_cwd;
+
+        // 2. Determinar o script principal a partir do package.json
+        const packageJsonPath = path.posix.join(botDirectory, 'package.json');
+        const catResult = await ssh.execCommand(`cat "${packageJsonPath}"`);
+        if (catResult.code !== 0) {
+            throw new Error(`Não foi possível ler o package.json em ${packageJsonPath}: ${catResult.stderr}`);
+        }
+        const packageJson = JSON.parse(catResult.stdout);
+        const mainScript = packageJson.main || (packageJson.scripts && packageJson.scripts.start ? packageJson.scripts.start.split(' ').pop() : null);
+        if (!mainScript) {
+            throw new Error('Não foi possível encontrar a entrada "main" ou "scripts.start" no package.json do bot.');
+        }
 
         sendProgress(`A parar e a remover o processo '${name}' do PM2 para limpar a configuração...`);
         const deleteResult = await ssh.execCommand(`${NVM_PREFIX}pm2 delete ${name}`);
@@ -250,7 +272,7 @@ async function handleResetSession(ws, data) {
         }
         sendProgress(`Pasta de sessão apagada.`);
 
-        sendProgress(`A iniciar o bot novamente com o diretório de trabalho correto...`);
+        sendProgress(`A iniciar o bot novamente com o script correto ('${mainScript}')...`);
         const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
         const pm2Result = await ssh.execCommand(pm2Command);
         if (pm2Result.code !== 0) {
@@ -263,17 +285,14 @@ async function handleResetSession(ws, data) {
 
     } catch (error) {
         sendProgress(`\nERRO: ${error.message}`);
-        sendProgress(`Ocorreu um erro. A tentar restaurar o bot...`);
-        const pm2Command = `cd "${botDirectory}" && ${NVM_PREFIX}pm2 start ${mainScript} --name "${name}"`;
-        await ssh.execCommand(pm2Command).catch((err)=>{
-             sendProgress(`AVISO: Não foi possível restaurar o bot automaticamente. Verifique o estado manualmente. Erro: ${err.message}`);
-        });
+        sendProgress(`Ocorreu um erro durante o processo. Verifique os logs do bot.`);
     } finally {
         if (ssh.connection) {
             ssh.dispose();
         }
     }
 }
+
 
 server.listen(PORT, () => {
     console.log(`Painel de Controlo de Bots a rodar na porta ${PORT}`);
