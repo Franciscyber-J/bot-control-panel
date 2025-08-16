@@ -145,9 +145,16 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="notification-purpose">Finalidade (Identificador usado no código)</label>
+                    <label for="notification-purpose">
+                        <div class="label-with-tooltip">
+                            <span>Finalidade (Identificador usado no código)</span>
+                            <div class="tooltip">
+                                <i data-feather="help-circle"></i>
+                                <span class="tooltip-text">Este é o identificador único que o seu código usa para chamar esta notificação. O valor aqui deve ser exatamente igual ao que está na função `sendNotification('identificador_aqui', ...)` no seu script.</span>
+                            </div>
+                        </div>
+                    </label>
                     <input type="text" id="notification-purpose" placeholder="ex: alerta_novo_lead" required>
-                    <small style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px; display: block;">Este é o nome que você usará na função `sendNotification('...')`.</small>
                 </div>
                 
                 <div class="form-group">
@@ -177,7 +184,7 @@
     </div>
 
 <script>
-    // ########## SCRIPT COMPLETO E CORRIGIDO - V8 (INDICADOR DE LOADING) ##########
+    // SCRIPT COMPLETO E CORRIGIDO - V8 (INDICADOR DE LOADING)
 
     let currentLogSocket = null;
     let currentBotForNotifications = null;
@@ -450,6 +457,7 @@
             document.getElementById('notification-id').value = Date.now();
         }
         modal.style.display = 'flex';
+        feather.replace();
     }
 
     async function testNotification(name, token, chatId) {
