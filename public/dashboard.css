@@ -1,4 +1,4 @@
-/* ARQUIVO: public/dashboard.css (COMPLETO E CORRIGIDO) */
+/* ARQUIVO: public/dashboard.css (VERSÃO FINAL E CORRIGIDA) */
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap');
 
 :root {
@@ -289,14 +289,35 @@ body::before {
 .log-container code { font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; }
 .panel-footer { text-align: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem; margin-top: 2rem; font-size: 0.9rem; color: var(--text-secondary); }
 
-.info-message { padding: 1rem; text-align: center; color: var(--text-secondary); background-color: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.9rem; }
+.info-message {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+.purpose-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.purpose-list code {
+    background-color: var(--bg-main);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--accent-primary);
+}
 
-/* ### CORREÇÃO VISUAL APLICADA AQUI ### */
 .notification-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem; /* Adiciona espaço entre o texto e os botões */
+    gap: 1rem;
     padding: 1rem;
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -305,8 +326,8 @@ body::before {
 }
 .notification-item:last-child { margin-bottom: 0; }
 .notification-item > div:first-child {
-    flex-grow: 1; /* Permite que o container do texto cresça */
-    min-width: 0; /* Permite que o container do texto encolha e quebre linha se necessário */
+    flex-grow: 1;
+    min-width: 0;
 }
 .notification-item strong { color: var(--text-primary); font-size: 1rem; }
 .notification-item small { color: var(--text-secondary); font-size: 0.85rem; word-break: break-all; }
@@ -314,10 +335,9 @@ body::before {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    flex-shrink: 0; /* Impede que o container dos botões encolha */
+    flex-shrink: 0;
 }
 .notification-item-actions .action-btn-footer { padding: 0.6rem 0.8rem; }
-/* ### FIM DA CORREÇÃO VISUAL ### */
 
 .card-title-group { display: flex; flex-direction: column; gap: 0.5rem; }
 .action-btn-icon { background: transparent; border: none; padding: 0.5rem; cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s ease; color: var(--text-secondary); }
@@ -372,9 +392,8 @@ body::before {
     color: var(--text-secondary);
 }
 
-#notification-modal {
-    z-index: 101;
-}
+#notification-modal { z-index: 101; }
+#confirmation-modal { z-index: 102; } /* ### CORREÇÃO DO MODAL AQUI ### */
 
 @keyframes spin {
   to { transform: rotate(360deg); }
