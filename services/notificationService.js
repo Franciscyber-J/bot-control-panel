@@ -1,4 +1,4 @@
-// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE IPV6 E DOTENV)
+// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE REDE REFORÇADA)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
@@ -107,14 +107,15 @@ Object.keys(process.env).forEach(key => {
         if (purpose && token && chatId) {
             try {
                 if (!botsByPurpose[purpose]) {
-                    // ### CORREÇÃO DE REDE IPV6 APLICADA AQUI ###
+                    // ### CORREÇÃO DE REDE REFORÇADA AQUI ###
                     const botOptions = {
+                        polling: false, // Explicitamente desativado pois não precisamos
                         request: {
                             family: 4 // Força o uso de IPv4
                         }
                     };
                     botsByPurpose[purpose] = {
-                        instance: new TelegramBot(token, {}, botOptions),
+                        instance: new TelegramBot(token, botOptions),
                         chatId: chatId,
                     };
                 }
@@ -186,9 +187,8 @@ async function injectNotifier(ssh, scriptPath) {
 
 async function sendTestMessage(token, chatId, message) {
     try {
-        // ### CORREÇÃO DE REDE IPV6 APLICADA AQUI TAMBÉM ###
-        const botOptions = { request: { family: 4 } };
-        const bot = new TelegramBot(token, {}, botOptions);
+        const botOptions = { polling: false, request: { family: 4 } };
+        const bot = new TelegramBot(token, botOptions);
         await bot.sendMessage(chatId, message);
     } catch (error) {
         const errorMessage = error.response ? error.response.body.description : error.message;
