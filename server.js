@@ -174,7 +174,7 @@ server.on('upgrade', (request, socket, head) => {
 
 wss.on('connection', (ws, request) => {
     const { pathname } = url.parse(request.url);
-    
+
     if (pathname === '/ws/dashboard') {
         dashboardClients.add(ws);
         getBotsStatus().then(status => {
@@ -218,22 +218,20 @@ wss.on('connection', (ws, request) => {
     ws.close(1002, 'Endpoint WebSocket inválido.');
 });
 
-// ### FUNÇÃO handleResetSession TOTALMENTE CORRIGIDA ###
 async function handleResetSession(ws, data) {
-    const { name } = data; // Apenas o nome é necessário
+    const { name } = data;
     const sendProgress = (message) => {
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ type: 'progress', message: `[PAINEL] ${message}` }));
         }
     };
-    
+
     const ssh = new NodeSSH();
-    
+
     try {
         await ssh.connect(sshConfig);
         sendProgress(`Iniciando procedimento para gerar novo QR Code para '${name}'...`);
-        
-        // 1. Obter info do bot a partir do PM2 para garantir os caminhos corretos
+
         const pm2ListResult = await ssh.execCommand(`${NVM_PREFIX}pm2 jlist`);
         if (pm2ListResult.code !== 0 || !pm2ListResult.stdout) {
             throw new Error(`Falha ao obter a lista de processos do PM2: ${pm2ListResult.stderr}`);
@@ -245,7 +243,6 @@ async function handleResetSession(ws, data) {
         }
         const botDirectory = botInfo.pm2_env.pm_cwd;
 
-        // 2. Determinar o script principal a partir do package.json
         const packageJsonPath = path.posix.join(botDirectory, 'package.json');
         const catResult = await ssh.execCommand(`cat "${packageJsonPath}"`);
         if (catResult.code !== 0) {
@@ -263,7 +260,7 @@ async function handleResetSession(ws, data) {
             throw new Error(`Falha ao remover o processo do PM2: ${deleteResult.stderr}`);
         }
         sendProgress(`Processo removido da lista do PM2 com sucesso.`);
-        
+
         sendProgress(`A apagar a pasta de sessão .wwebjs_auth...`);
         const sessionPath = path.posix.join(botDirectory, '.wwebjs_auth');
         const rmResult = await ssh.execCommand(`rm -rf "${sessionPath}"`);
@@ -278,7 +275,7 @@ async function handleResetSession(ws, data) {
         if (pm2Result.code !== 0) {
             throw new Error(`Falha ao iniciar o bot com PM2: ${pm2Result.stderr}`);
         }
-        
+
         sendProgress(`\nPROCESSO CONCLUÍDO COM SUCESSO!`);
         sendProgress(`O bot '${name}' foi reiniciado corretamente.`);
         sendProgress(`Por favor, observe os logs para ler o novo QR Code.`);
