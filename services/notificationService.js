@@ -1,4 +1,4 @@
-// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE NVM)
+// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE NVM E DOTENV)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
@@ -94,6 +94,7 @@ function getNotifierContent() {
 // Ficheiro gerado automaticamente pelo Bot Control Panel - NÃO EDITE MANUALMENTE
 const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
+// ### CORREÇÃO APLICADA AQUI: Carrega o .env a partir do diretório do script principal ###
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const botsByPurpose = {};
@@ -108,12 +109,15 @@ Object.keys(process.env).forEach(key => {
 
         if (purpose && token && chatId) {
             try {
-                botsByPurpose[purpose] = {
-                    instance: new TelegramBot(token),
-                    chatId: chatId,
-                };
+                // Previne que um token inválido quebre o bot inteiro
+                if (!botsByPurpose[purpose]) {
+                    botsByPurpose[purpose] = {
+                        instance: new TelegramBot(token),
+                        chatId: chatId,
+                    };
+                }
             } catch(e) {
-                console.error(\`[Notifier] Falha ao inicializar o bot do Telegram para a finalidade: \${purpose}\`, e.message);
+                console.error(\`[Notifier] Falha ao inicializar o bot do Telegram para a finalidade: '\${purpose}'. Verifique se o TOKEN é válido. Erro: \`, e.message);
             }
         }
     }
@@ -146,8 +150,6 @@ async function injectNotifier(ssh, scriptPath) {
     const notifierPath = path.join(botDirectory, 'telegramNotifier.js');
     const mainScriptPath = scriptPath;
 
-    // ### CORREÇÃO APLICADA AQUI ###
-    // Adicionamos o NVM_PREFIX para garantir que o comando 'npm' seja encontrado.
     console.log(`[PAINEL] A garantir que as dependências de notificação existem em ${botDirectory}...`);
     const installCommand = `${NVM_PREFIX}npm install --prefix "${botDirectory}" node-telegram-bot-api dotenv`;
     const installResult = await ssh.execCommand(installCommand);
