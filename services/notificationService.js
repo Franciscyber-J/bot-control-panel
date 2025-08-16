@@ -1,9 +1,8 @@
-// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE NVM E DOTENV)
+// ARQUIVO: services/notificationService.js (VERSÃO FINAL COM CORREÇÃO DE IPV6 E DOTENV)
 
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 
-// Prefixo para garantir que o ambiente NVM seja carregado na sessão SSH
 const NVM_PREFIX = 'source /root/.nvm/nvm.sh && ';
 
 function parseNotifications(envContent) {
@@ -88,13 +87,11 @@ function generateNewEnvContent(currentEnvContent, notifications) {
     return newEnvContent.trim() + '\n';
 }
 
-
 function getNotifierContent() {
     return `
 // Ficheiro gerado automaticamente pelo Bot Control Panel - NÃO EDITE MANUALMENTE
 const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
-// ### CORREÇÃO APLICADA AQUI: Carrega o .env a partir do diretório do script principal ###
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const botsByPurpose = {};
@@ -109,10 +106,15 @@ Object.keys(process.env).forEach(key => {
 
         if (purpose && token && chatId) {
             try {
-                // Previne que um token inválido quebre o bot inteiro
                 if (!botsByPurpose[purpose]) {
+                    // ### CORREÇÃO DE REDE IPV6 APLICADA AQUI ###
+                    const botOptions = {
+                        request: {
+                            family: 4 // Força o uso de IPv4
+                        }
+                    };
                     botsByPurpose[purpose] = {
-                        instance: new TelegramBot(token),
+                        instance: new TelegramBot(token, {}, botOptions),
                         chatId: chatId,
                     };
                 }
@@ -184,7 +186,9 @@ async function injectNotifier(ssh, scriptPath) {
 
 async function sendTestMessage(token, chatId, message) {
     try {
-        const bot = new TelegramBot(token);
+        // ### CORREÇÃO DE REDE IPV6 APLICADA AQUI TAMBÉM ###
+        const botOptions = { request: { family: 4 } };
+        const bot = new TelegramBot(token, {}, botOptions);
         await bot.sendMessage(chatId, message);
     } catch (error) {
         const errorMessage = error.response ? error.response.body.description : error.message;

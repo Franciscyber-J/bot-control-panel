@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <link rel="stylesheet" href="dashboard.css">
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 </head>
+
 <body>
     <div class="container">
         <header class="panel-header">
@@ -22,7 +24,7 @@
         </header>
 
         <main id="bot-list" class="bot-list-grid">
-            </main>
+        </main>
 
         <footer class="panel-footer">
             <p>Status da Conexão: <span id="connection-status">Conectando...</span></p>
@@ -183,598 +185,561 @@
         </div>
     </div>
 
-<script>
-    // SCRIPT COMPLETO E CORRIGIDO - V9 (LEITURA DE FINALIDADES)
+    <script>
+        // SCRIPT COMPLETO E CORRIGIDO - V10 (INDICADOR DE LOADING E MELHORIAS FINAIS)
 
-    let currentLogSocket = null;
-    let currentBotForNotifications = null;
-    let newBotEnvContent = null;
-    let dashboardSocket = null;
+        let currentLogSocket = null;
+        let currentBotForNotifications = null;
+        let newBotEnvContent = null;
+        let dashboardSocket = null;
 
-    function showNotification(title, message, type = 'info') {
-        const modal = document.getElementById('notification-modal');
-        modal.querySelector('#notification-title').textContent = title;
-        modal.querySelector('#notification-message').textContent = message;
-        modal.style.display = 'flex';
-    }
+        function setLoading(button, isLoading, loadingText = 'Aguarde...') {
+            if (!button) return;
+            const originalContent = button.dataset.originalContent;
+            if (isLoading) {
+                if (!originalContent) {
+                    button.dataset.originalContent = button.innerHTML;
+                }
+                button.disabled = true;
+                button.innerHTML = `<span class="loading-spinner"></span>${loadingText}`;
+            } else {
+                if (originalContent) {
+                    button.innerHTML = originalContent;
+                    button.dataset.originalContent = '';
+                }
+                button.disabled = false;
+            }
+        }
 
-    function showConfirmation(title, message) {
-        return new Promise((resolve) => {
-            const modal = document.getElementById('confirmation-modal');
-            modal.querySelector('#confirmation-title').textContent = title;
-            modal.querySelector('#confirmation-message').innerHTML = message.replace(/\n/g, '<br>');
+        function showNotification(title, message, type = 'info') {
+            const modal = document.getElementById('notification-modal');
+            modal.querySelector('#notification-title').textContent = title;
+            modal.querySelector('#notification-message').textContent = message;
             modal.style.display = 'flex';
-            const btnYes = document.getElementById('confirm-btn-yes');
-            const btnNo = document.getElementById('confirm-btn-no');
-            btnYes.onclick = () => { modal.style.display = 'none'; resolve(true); };
-            btnNo.onclick = () => { modal.style.display = 'none'; resolve(false); };
-        });
-    }
+        }
 
-    async function fetchWithAuth(url, options = {}) {
-        const response = await fetch(url, options);
-        if (response.status === 401) {
-            window.location.href = '/';
-            throw new Error('Não autorizado');
-        }
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
-            throw new Error(errorData.error);
-        }
-        return response.json();
-    }
-    
-    async function manageBot(name, action) {
-        const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
-        const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`);
-        if (!confirmed) return;
-        try {
-            const result = await fetchWithAuth('/api/bots/manage', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, action })
+        function showConfirmation(title, message, button) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmation-modal');
+                modal.querySelector('#confirmation-title').textContent = title;
+                modal.querySelector('#confirmation-message').innerHTML = message.replace(/\n/g, '<br>');
+                modal.style.display = 'flex';
+                
+                const btnYes = document.getElementById('confirm-btn-yes');
+                const btnNo = document.getElementById('confirm-btn-no');
+
+                const resolveAndCleanup = (value) => {
+                    modal.style.display = 'none';
+                    if (button && !value) setLoading(button, false); // Só para o loading se cancelar
+                    btnYes.onclick = null;
+                    btnNo.onclick = null;
+                    resolve(value);
+                };
+
+                btnYes.onclick = () => resolveAndCleanup(true);
+                btnNo.onclick = () => resolveAndCleanup(false);
             });
-            showNotification('Sucesso', result.message);
-        } catch (error) {
-            showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
         }
-    }
 
-    async function deleteBot(name) {
-        const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`);
-        if (!confirmed) return;
-        try {
-            const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
-            showNotification('Sucesso', result.message);
-        } catch (error) {
-            showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error');
+        async function fetchWithAuth(url, options = {}) {
+            const response = await fetch(url, options);
+            if (response.status === 401) {
+                window.location.href = '/';
+                throw new Error('Não autorizado');
+            }
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Falha de conexão. Servidor indisponível.' }));
+                throw new Error(errorData.error);
+            }
+            return response.json();
         }
-    }
-
-    async function showLogs(name, initialMessage = null) {
-        const logModal = document.getElementById('log-modal');
-        const logModalTitle = document.getElementById('log-modal-title');
-        const logContent = document.getElementById('log-content');
-        const logContainer = logContent.parentElement;
         
-        logModalTitle.textContent = `Logs de ${name}`;
-        logContent.textContent = initialMessage ? `${initialMessage}\n\n` : '';
-        logModal.style.display = 'flex';
-        logContainer.scrollTop = logContainer.scrollHeight;
+        async function manageBot(name, action, button) {
+            setLoading(button, true, action.charAt(0).toUpperCase() + action.slice(1) + 'ndo...');
+            const actionPt = { start: 'INICIAR', restart: 'REINICIAR', stop: 'PARAR' };
+            const confirmed = await showConfirmation('Confirmar Ação', `Confirmar execução do comando?\n> ${actionPt[action]} ${name}`, button);
+            if (!confirmed) return;
 
-        if (initialMessage) {
-             logContent.textContent += 'A iniciar conexão para logs em tempo real...\n';
-        } else {
-            logContent.textContent = 'A carregar histórico de logs...\n';
+            setLoading(button, true, action.charAt(0).toUpperCase() + action.slice(1) + 'ndo...');
             try {
-                const result = await fetchWithAuth(`/api/bots/logs/${name}`);
-                logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
+                const result = await fetchWithAuth('/api/bots/manage', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, action })
+                });
+                showNotification('Sucesso', result.message);
             } catch (error) {
-                logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}\n`;
+                showNotification('Falha na Execução', `ERRO: ${error.message}`, 'error');
+            } finally {
+                setLoading(button, false);
             }
         }
-        logContainer.scrollTop = logContainer.scrollHeight;
-        
-        if (currentLogSocket) currentLogSocket.close();
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs/${name}`;
-        currentLogSocket = new WebSocket(wsUrl);
 
-        currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; };
-        currentLogSocket.onmessage = (event) => { logContent.textContent += event.data; logContainer.scrollTop = logContainer.scrollHeight; };
-        currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET DE LOGS ---\n'; };
-        currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
-    }
-
-    function showUpdateModal(name) {
-        const modal = document.getElementById('update-source-modal');
-        const form = document.getElementById('update-source-form');
-        const gitUrlInput = document.getElementById('bot-git-url');
-        modal.style.display = 'flex';
-        gitUrlInput.value = '';
-        
-        form.onsubmit = async (event) => {
-            event.preventDefault();
-
-            const submitButton = form.querySelector('button[type="submit"]');
-            const originalButtonText = submitButton.innerHTML;
-            submitButton.disabled = true;
-            submitButton.innerHTML = `<span class="loading-spinner"></span>A fazer deploy...`;
-
-            const gitUrl = gitUrlInput.value;
-            modal.style.display = 'none';
+        async function deleteBot(name, button) {
+            setLoading(button, true, 'Excluindo...');
+            const confirmed = await showConfirmation('Confirmar Exclusão', `Tem a certeza que deseja PARAR e EXCLUIR o bot "${name}"?\nEsta ação não pode ser desfeita.`, button);
+            if (!confirmed) return;
             
-            await updateBot(name, gitUrl);
-
-            submitButton.disabled = false;
-            submitButton.innerHTML = originalButtonText;
-        };
-    }
-
-    async function updateBot(name, gitUrl) {
-        const modal = document.getElementById('update-modal');
-        const title = document.getElementById('update-modal-title');
-        const content = document.getElementById('update-content');
-        modal.style.display = 'flex';
-        title.textContent = `Deploy do Bot: ${name}`;
-        content.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
-
-        try {
-            const result = await fetchWithAuth(`/api/bots/update/${name}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gitUrl })
-            });
-            content.textContent = result.output;
-        } catch (error) {
-            content.textContent = `ERRO NO DEPLOY: ${error.message}`;
-        }
-    }
-
-    async function uploadEnvFile(name) {
-        const fileInput = document.getElementById('env-file-input');
-        fileInput.onchange = async (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
-            if (!confirmed) { fileInput.value = ''; return; }
-
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const result = await fetchWithAuth(`/api/bots/env/${name}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result })
-                    });
-                    showNotification('Sucesso', result.message);
-                } catch (error) {
-                    showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error');
-                } finally {
-                    fileInput.value = '';
-                }
-            };
-            reader.readAsText(file);
-        };
-        fileInput.click();
-    }
-    
-    async function resetBotSession(botName) {
-        const confirmed = await showConfirmation(
-            'Adicionar Novo Número', 
-            `Tem a certeza que deseja desconectar o aparelho atual do bot <b>${botName}</b>?\n\nEsta ação irá apagar os dados da sessão guardada, forçar a geração de um novo QR Code e reiniciar o bot.`
-        );
-        if (!confirmed) return;
-
-        showLogs(botName, ``);
-
-        if (dashboardSocket && dashboardSocket.readyState === WebSocket.OPEN) {
-            dashboardSocket.send(JSON.stringify({
-                type: 'resetSession',
-                data: { name: botName }
-            }));
-        } else {
-            showNotification('Erro', 'A conexão com o painel não está ativa. Por favor, atualize a página.', 'error');
-        }
-    }
-    
-    async function showNotificationManager(botName) {
-        currentBotForNotifications = { name: botName };
-        const modal = document.getElementById('notification-manager-modal');
-        const title = document.getElementById('notification-manager-title');
-        const container = document.getElementById('notification-list-container');
-        title.textContent = `Gerir Notificações de "${botName}"`;
-        container.innerHTML = '<p>A carregar configurações...</p>';
-        modal.style.display = 'flex';
-
-        try {
-            const url = `/api/bots/notifications/${encodeURIComponent(botName)}`;
-            const data = await fetchWithAuth(url);
-            renderNotificationList(data.notifications, data.notifierInjected, data.foundPurposes);
-        } catch (error) {
-            container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`;
-        }
-    }
-
-    // ### FUNÇÃO ATUALIZADA PARA MOSTRAR AS FINALIDADES ENCONTRADAS ###
-    function renderNotificationList(notifications = [], notifierInjected, foundPurposes = []) {
-        const container = document.getElementById('notification-list-container');
-        let html = '';
-
-        if (foundPurposes.length > 0) {
-            html += `<div class="info-message"><strong>Finalidades encontradas no código:</strong><br><small>Use um destes nomes no campo "Finalidade" para garantir o funcionamento.</small><div class="purpose-list">`;
-            foundPurposes.forEach(purpose => {
-                html += `<code>${purpose}</code>`;
-            });
-            html += '</div></div>';
-        }
-
-        if (notifications.length === 0) {
-            html += '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
-        } else {
-            html += notifications.map(notif => {
-                const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
-                return `
-                <div class="notification-item">
-                    <div>
-                        <strong>${notif.name}</strong><br>
-                        <small>Finalidade: <code>${notif.purpose || 'Não definida'}</code> | Chat ID: ${notif.chatId}</small>
-                    </div>
-                    <div class="notification-item-actions">
-                        <button class="action-btn-footer test-notification-btn" 
-                                data-name="${notif.name.replace(/"/g, '&quot;')}" 
-                                data-token="${notif.token}" 
-                                data-chat-id="${notif.chatId}" 
-                                title="Enviar Teste">
-                            <i data-feather="send"></i> Testar
-                        </button>
-                        <button class="action-btn-footer edit-notification-btn" 
-                                data-notification='${notifDataForEdit}' 
-                                title="Editar">
-                            <i data-feather="edit"></i> Editar
-                        </button>
-                        <button class="action-btn-footer danger delete-notification-btn" 
-                                data-notification-id="${notif.id}"
-                                data-notification-name="${notif.name.replace(/"/g, '&quot;')}"
-                                title="Remover">
-                            <i data-feather="trash-2"></i> Remover
-                        </button>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-        
-        if (!notifierInjected && (notifications.length > 0 || foundPurposes.length > 0)) {
-            html += `
-                <div class="info-message warning">
-                    <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
-                    <button class="action-btn primary" onclick="injectNotifierCode()">
-                        <i data-feather="tool"></i>Aplicar Correção Automática
-                    </button>
-                </div>`;
-        }
-        container.innerHTML = html;
-        feather.replace();
-    }
-
-    function showEditNotificationModal(notification = null) {
-        const modal = document.getElementById('edit-notification-modal');
-        const form = document.getElementById('edit-notification-form');
-        form.reset();
-        
-        if (notification) {
-            document.getElementById('edit-notification-title').textContent = "Editar Notificação";
-            document.getElementById('notification-id').value = notification.id;
-            document.getElementById('notification-name').value = notification.name;
-            document.getElementById('notification-purpose').value = notification.purpose || '';
-            document.getElementById('notification-token').value = notification.token;
-            document.getElementById('notification-chat-id').value = notification.chatId;
-        } else {
-            document.getElementById('edit-notification-title').textContent = "Adicionar Nova Notificação";
-            document.getElementById('notification-id').value = Date.now();
-        }
-        modal.style.display = 'flex';
-        feather.replace();
-    }
-
-    async function testNotification(name, token, chatId) {
-        if (!token || !chatId) {
-            showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Verifique os dados.', 'error');
-            return;
-        }
-
-        try {
-            const result = await fetchWithAuth('/api/bots/notifications/test', {
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ 
-                    token: token, 
-                    chatId: chatId, 
-                    message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${name}".` 
-                })
-            });
-            showNotification('Sucesso', result.message);
-        } catch (error) {
-            showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
-        }
-    }
-
-    async function deleteNotification(notificationId, notificationName) {
-        if (!currentBotForNotifications) return;
-        const { name: botName } = currentBotForNotifications;
-
-        const confirmed = await showConfirmation('Confirmar Remoção', `Tem a certeza que deseja remover a notificação "${notificationName}"?`);
-        if (!confirmed) return;
-
-        try {
-            const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}`;
-            const result = await fetchWithAuth(url, { method: 'DELETE' });
-            showNotification('Sucesso', result.message);
-            showNotificationManager(botName);
-        } catch (error) {
-            showNotification('Falha ao Remover', `ERRO: ${error.message}`, 'error');
-        }
-    }
-
-    async function injectNotifierCode() {
-        if (!currentBotForNotifications) return;
-        const { name } = currentBotForNotifications;
-
-        const confirmed = await showConfirmation('Confirmar Correção Automática', `Isto irá adicionar a linha de código necessária no topo do ficheiro principal do bot <b>${name}</b> e reiniciá-lo.\n\nDeseja continuar?`);
-        if (!confirmed) return;
-
-        try {
-            const result = await fetchWithAuth(`/api/bots/inject-notifier/${name}`, {
-                method: 'POST'
-            });
-            showNotification('Sucesso', result.message);
-            showNotificationManager(name);
-        } catch (error) {
-            showNotification('Falha ao Aplicar Correção', `ERRO: ${error.message}`, 'error');
-        }
-    }
-    
-    function renderBot(bot) {
-        const isOnline = bot.pm2_env.status === 'online';
-        const statusClass = isOnline ? 'status-online' : 'status-offline';
-        const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
-        const statusText = isOnline ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
-
-        return `
-            <div class="bot-card" data-bot-name="${bot.name}">
-                <div class="card-header">
-                    <div class="card-title-group">
-                        <h2>${bot.name}</h2>
-                        <div class="status-indicator ${statusClass}"><span>${statusText}</span></div>
-                    </div>
-                    <div class="card-header-actions">
-                        <button class="action-btn-icon danger delete-bot-btn" title="Excluir Bot">
-                            <i data-feather="trash-2"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="data-field"><span class="label">CARGA DE CPU</span> <span>${bot.monit.cpu}%</span></p>
-                    <p class="data-field"><span class="label">USO DE MEMÓRIA</span> <span>${memory} MB</span></p>
-                    <p class="data-field"><span class="label">REINICIALIZAÇÕES</span> <span>${bot.pm2_env.restart_time}</span></p>
-                </div>
-                <div class="card-actions">
-                    <button class="action-btn-card manage-bot-btn" data-action="start" ${isOnline ? 'disabled' : ''}>Iniciar</button>
-                    <button class="action-btn-card manage-bot-btn" data-action="restart" ${!isOnline ? 'disabled' : ''}>Reiniciar</button>
-                    <button class="action-btn-card stop manage-bot-btn" data-action="stop" ${!isOnline ? 'disabled' : ''}>Parar</button>
-                </div>
-                <div class="card-footer-actions">
-                    <button class="action-btn-footer reset-session-btn" title="Adicionar novo número de WhatsApp"><i data-feather="zap"></i>Add Nº Novo</button>
-                    <button class="action-btn-footer manage-notifications-btn" title="Gerir Notificações do Telegram"><i data-feather="bell"></i>Notificações</button>
-                    <button class="action-btn-footer upload-env-btn" title="Enviar Ficheiro .env"><i data-feather="upload-cloud"></i>Enviar .env</button>
-                    <button class="action-btn-footer show-logs-btn" title="Ver Logs"><i data-feather="terminal"></i>Logs</button>
-                    <button class="action-btn-footer update-source-btn" title="Atualizar a partir do Git"><i data-feather="git-pull-request"></i>Atualizar</button>
-                </div>
-            </div>
-        `;
-    }
-
-    function loadBots(bots = []) {
-        const botListContainer = document.getElementById('bot-list');
-        if (bots && bots.length > 0) {
-            botListContainer.innerHTML = bots.map(renderBot).join('');
-        } else {
-            botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>';
-        }
-        feather.replace();
-    }
-    
-    function connectDashboardSocket() {
-        const statusElement = document.getElementById('connection-status');
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
-        
-        dashboardSocket = new WebSocket(wsUrl);
-
-        dashboardSocket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; };
-        dashboardSocket.onmessage = (event) => {
+            setLoading(button, true, 'Excluindo...');
             try {
-                const message = JSON.parse(event.data);
-                if (message.type === 'statusUpdate') loadBots(message.data);
-                if (message.type === 'progress') {
-                    const logContent = document.getElementById('log-content');
-                    if (logContent && logContent.closest('.modal-overlay').style.display === 'flex') {
-                        logContent.textContent += message.message + '\n';
-                        logContent.parentElement.scrollTop = logContent.parentElement.scrollHeight;
-                    }
+                const result = await fetchWithAuth(`/api/bots/delete/${name}`, { method: 'DELETE' });
+                showNotification('Sucesso', result.message);
+            } catch (error) {
+                showNotification('Falha ao Excluir', `ERRO: ${error.message}`, 'error');
+                setLoading(button, false);
+            }
+        }
+
+        async function showLogs(name, initialMessage = null) {
+            const logModal = document.getElementById('log-modal');
+            const logModalTitle = document.getElementById('log-modal-title');
+            const logContent = document.getElementById('log-content');
+            const logContainer = logContent.parentElement;
+            
+            logModalTitle.textContent = `Logs de ${name}`;
+            logContent.textContent = initialMessage ? `${initialMessage}\n\n` : 'A carregar histórico de logs...\n';
+            logModal.style.display = 'flex';
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            if (!initialMessage) {
+                try {
+                    const result = await fetchWithAuth(`/api/bots/logs/${name}`);
+                    logContent.textContent = result.logs ? result.logs + '\n--- Logs em tempo real ---\n' : '--- Logs em tempo real ---\n';
+                } catch (error) {
+                    logContent.textContent = `ERRO AO CARREGAR HISTÓRICO: ${error.message}\n`;
                 }
-            } catch (e) { console.error('Failed to parse WebSocket message:', e); }
-        };
-        dashboardSocket.onclose = () => {
-            statusElement.textContent = 'Desconectado. Tentando reconectar...';
-            statusElement.style.color = 'var(--red)';
-            setTimeout(connectDashboardSocket, 3000);
-        };
-        dashboardSocket.onerror = (error) => {
-            statusElement.textContent = 'Erro de Conexão';
-            statusElement.style.color = 'var(--red)';
-            console.error('WebSocket Error:', error);
-            dashboardSocket.close();
-        };
-    }
+            }
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            if (currentLogSocket) currentLogSocket.close();
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs/${name}`;
+            currentLogSocket = new WebSocket(wsUrl);
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const addBotModal = document.getElementById('add-bot-modal');
-        const addBotForm = document.getElementById('add-bot-form');
-        const botListContainer = document.getElementById('bot-list');
-        const notificationListContainer = document.getElementById('notification-list-container');
+            currentLogSocket.onopen = () => { logModalTitle.textContent = `Logs de ${name} (Conectado)`; };
+            currentLogSocket.onmessage = (event) => { logContent.textContent += event.data; logContainer.scrollTop = logContainer.scrollHeight; };
+            currentLogSocket.onerror = () => { logContent.textContent += '\n--- ERRO NA CONEXÃO WEBSOCKET DE LOGS ---\n'; };
+            currentLogSocket.onclose = () => { logModalTitle.textContent = `Logs de ${name} (Desconectado)`; };
+        }
 
-        botListContainer.addEventListener('click', (event) => {
-            const button = event.target.closest('button');
-            if (!button) return;
-            const card = button.closest('.bot-card');
-            const botName = card.dataset.botName;
+        function showUpdateModal(name) {
+            const modal = document.getElementById('update-source-modal');
+            const form = document.getElementById('update-source-form');
+            const gitUrlInput = document.getElementById('bot-git-url');
+            modal.style.display = 'flex';
+            gitUrlInput.value = '';
+            
+            form.onsubmit = async (event) => {
+                event.preventDefault();
 
-            if (button.classList.contains('manage-bot-btn')) manageBot(botName, button.dataset.action);
-            if (button.classList.contains('delete-bot-btn')) deleteBot(botName);
-            if (button.classList.contains('reset-session-btn')) resetBotSession(botName);
-            if (button.classList.contains('manage-notifications-btn')) showNotificationManager(botName);
-            if (button.classList.contains('upload-env-btn')) uploadEnvFile(botName);
-            if (button.classList.contains('show-logs-btn')) showLogs(botName);
-            if (button.classList.contains('update-source-btn')) showUpdateModal(botName);
-        });
+                const submitButton = form.querySelector('button[type="submit"]');
+                setLoading(submitButton, true, 'A fazer deploy...');
+                
+                const gitUrl = gitUrlInput.value;
+                modal.style.display = 'none';
+                
+                await updateBot(name, gitUrl);
+                setLoading(submitButton, false);
+            };
+        }
+
+        async function updateBot(name, gitUrl) {
+            const modal = document.getElementById('update-modal');
+            const title = document.getElementById('update-modal-title');
+            const content = document.getElementById('update-content');
+            modal.style.display = 'flex';
+            title.textContent = `Deploy do Bot: ${name}`;
+            content.textContent = `A iniciar processo de deploy a partir de: ${gitUrl}`;
+
+            try {
+                const result = await fetchWithAuth(`/api/bots/update/${name}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gitUrl })
+                });
+                content.textContent = result.output;
+            } catch (error) {
+                content.textContent = `ERRO NO DEPLOY: ${error.message}`;
+            }
+        }
+
+        async function uploadEnvFile(name) {
+            const fileInput = document.getElementById('env-file-input');
+            fileInput.onchange = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const confirmed = await showConfirmation('Confirmar Upload', `Tem a certeza que deseja enviar o ficheiro "${file.name}" para o bot "${name}"?\nIsto irá substituir o ficheiro .env existente e reiniciar o bot.`);
+                if (!confirmed) { fileInput.value = ''; return; }
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const result = await fetchWithAuth(`/api/bots/env/${name}`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: e.target.result })
+                        });
+                        showNotification('Sucesso', result.message);
+                    } catch (error) {
+                        showNotification('Falha no Upload', `ERRO: ${error.message}`, 'error');
+                    } finally {
+                        fileInput.value = '';
+                    }
+                };
+                reader.readAsText(file);
+            };
+            fileInput.click();
+        }
         
-        notificationListContainer.addEventListener('click', (event) => {
-            const button = event.target.closest('button');
-            if (!button) return;
-            if (button.classList.contains('test-notification-btn')) {
-                const { name, token, chatId } = button.dataset;
-                testNotification(name, token, chatId);
-            }
-            if (button.classList.contains('edit-notification-btn')) {
-                const notificationData = JSON.parse(button.dataset.notification);
-                showEditNotificationModal(notificationData);
-            }
-            if (button.classList.contains('delete-notification-btn')) {
-                const { notificationId, notificationName } = button.dataset;
-                deleteNotification(notificationId, notificationName);
-            }
-        });
+        async function resetBotSession(botName, button) {
+            setLoading(button, true, 'A reiniciar...');
+            const confirmed = await showConfirmation(
+                'Adicionar Novo Número', 
+                `Tem a certeza que deseja desconectar o aparelho atual do bot <b>${botName}</b>?\n\nEsta ação irá apagar os dados da sessão guardada, forçar a geração de um novo QR Code e reiniciar o bot.`,
+                button
+            );
+            if (!confirmed) return;
 
-        document.getElementById('add-bot-btn').addEventListener('click', () => {
-            addBotForm.reset();
-            newBotEnvContent = null;
-            document.getElementById('add-bot-submit-btn').disabled = true;
-            document.getElementById('env-file-status').textContent = 'Nenhum ficheiro selecionado.';
-            document.getElementById('env-file-status').style.color = 'var(--text-secondary)';
-            addBotModal.style.display = 'flex';
-        });
+            setLoading(button, true, 'A reiniciar...');
+            showLogs(botName, ``);
 
-        document.getElementById('upload-env-btn-add').addEventListener('click', () => document.getElementById('bot-env-file-add').click());
+            if (dashboardSocket && dashboardSocket.readyState === WebSocket.OPEN) {
+                dashboardSocket.send(JSON.stringify({
+                    type: 'resetSession',
+                    data: { name: botName }
+                }));
+            } else {
+                showNotification('Erro', 'A conexão com o painel não está ativa. Por favor, atualize a página.', 'error');
+                setLoading(button, false);
+            }
+            setTimeout(() => setLoading(button, false), 20000);
+        }
+        
+        async function showNotificationManager(botName) {
+            currentBotForNotifications = { name: botName };
+            const modal = document.getElementById('notification-manager-modal');
+            const title = document.getElementById('notification-manager-title');
+            const container = document.getElementById('notification-list-container');
+            title.textContent = `Gerir Notificações de "${botName}"`;
+            container.innerHTML = '<div class="loading-spinner" style="margin: 2rem auto;"></div>';
+            modal.style.display = 'flex';
 
-        document.getElementById('bot-env-file-add').addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            const statusEl = document.getElementById('env-file-status');
-            const submitBtn = document.getElementById('add-bot-submit-btn');
-            if (!file) {
-                newBotEnvContent = null;
-                submitBtn.disabled = true;
-                statusEl.textContent = 'Nenhum ficheiro selecionado.';
-                statusEl.style.color = 'var(--text-secondary)';
+            try {
+                const url = `/api/bots/notifications/${encodeURIComponent(botName)}`;
+                const data = await fetchWithAuth(url);
+                renderNotificationList(data.notifications, data.notifierInjected, data.foundPurposes);
+            } catch (error) {
+                container.innerHTML = `<p style="color: var(--red);">ERRO: ${error.message}</p>`;
+            }
+        }
+
+        function renderNotificationList(notifications = [], notifierInjected, foundPurposes = []) {
+            const container = document.getElementById('notification-list-container');
+            let html = '';
+
+            if (foundPurposes.length > 0) {
+                html += `<div class="info-message"><strong>Finalidades encontradas no código:</strong><br><small>Use um destes nomes no campo "Finalidade" para garantir o funcionamento.</small><div class="purpose-list">`;
+                foundPurposes.forEach(purpose => {
+                    html += `<code>${purpose}</code>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (notifications.length === 0) {
+                html += '<p class="info-message">Nenhuma notificação do Telegram configurada para este bot.</p>';
+            } else {
+                html += notifications.map(notif => {
+                    const notifDataForEdit = JSON.stringify(notif).replace(/'/g, "&apos;");
+                    return `
+                    <div class="notification-item">
+                        <div>
+                            <strong>${notif.name}</strong><br>
+                            <small>Finalidade: <code>${notif.purpose || 'Não definida'}</code> | Chat ID: ${notif.chatId}</small>
+                        </div>
+                        <div class="notification-item-actions">
+                            <button class="action-btn-footer test-notification-btn" 
+                                    data-name="${notif.name.replace(/"/g, '&quot;')}" 
+                                    data-token="${notif.token}" 
+                                    data-chat-id="${notif.chatId}" 
+                                    title="Enviar Teste">
+                                <i data-feather="send"></i> Testar
+                            </button>
+                            <button class="action-btn-footer edit-notification-btn" 
+                                    data-notification='${notifDataForEdit}' 
+                                    title="Editar">
+                                <i data-feather="edit"></i> Editar
+                            </button>
+                            <button class="action-btn-footer danger delete-notification-btn" 
+                                    data-notification-id="${notif.id}"
+                                    data-notification-name="${notif.name.replace(/"/g, '&quot;')}"
+                                    title="Remover">
+                                <i data-feather="trash-2"></i> Remover
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            
+            if (!notifierInjected && (notifications.length > 0 || foundPurposes.length > 0)) {
+                html += `
+                    <div class="info-message warning">
+                        <p><strong>Ação Necessária:</strong> O código para usar as notificações ainda não foi implementado no script principal deste bot.</p>
+                        <button class="action-btn primary" onclick="injectNotifierCode(this)">
+                            <i data-feather="tool"></i>Aplicar Correção Automática
+                        </button>
+                    </div>`;
+            }
+            container.innerHTML = html;
+            feather.replace();
+        }
+
+        function showEditNotificationModal(notification = null) {
+            const modal = document.getElementById('edit-notification-modal');
+            const form = document.getElementById('edit-notification-form');
+            form.reset();
+            
+            if (notification) {
+                document.getElementById('edit-notification-title').textContent = "Editar Notificação";
+                document.getElementById('notification-id').value = notification.id;
+                document.getElementById('notification-name').value = notification.name;
+                document.getElementById('notification-purpose').value = notification.purpose || '';
+                document.getElementById('notification-token').value = notification.token;
+                document.getElementById('notification-chat-id').value = notification.chatId;
+            } else {
+                document.getElementById('edit-notification-title').textContent = "Adicionar Nova Notificação";
+                document.getElementById('notification-id').value = Date.now();
+            }
+            modal.style.display = 'flex';
+            feather.replace();
+        }
+
+        async function testNotification(name, token, chatId, button) {
+            setLoading(button, true, 'Testando...');
+            if (!token || !chatId) {
+                showNotification('Falha no Teste', 'ERRO: Token ou Chat ID estão em branco no cliente. Verifique os dados.', 'error');
+                setLoading(button, false);
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                newBotEnvContent = e.target.result;
-                statusEl.textContent = `Ficheiro "${file.name}" carregado.`;
-                statusEl.style.color = 'var(--green)';
-                submitBtn.disabled = false;
-            };
-            reader.onerror = () => {
-                newBotEnvContent = null;
-                submitBtn.disabled = true;
-                statusEl.textContent = 'Erro ao ler o ficheiro.';
-                statusEl.style.color = 'var(--red)';
-            };
-            reader.readAsText(file);
-        });
-        
-        addBotForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const submitButton = document.getElementById('add-bot-submit-btn');
-            const originalButtonText = submitButton.innerHTML;
-            submitButton.disabled = true;
-            submitButton.innerHTML = `<span class="loading-spinner"></span>Adicionando...`;
-
-            const gitUrl = document.getElementById('bot-git-url-add').value;
-            const name = document.getElementById('bot-name-add').value;
-            const updateModal = document.getElementById('update-modal');
-            const updateTitle = document.getElementById('update-modal-title');
-            const updateContent = document.getElementById('update-content');
-
-            addBotModal.style.display = 'none';
-            updateTitle.textContent = `A Adicionar o Bot: ${name}`;
-            updateContent.textContent = 'A iniciar o processo... Por favor, aguarde.';
-            updateModal.style.display = 'flex';
 
             try {
-                const result = await fetchWithAuth('/api/bots/add-from-git', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ gitUrl, name, envContent: newBotEnvContent })
-                });
-                updateContent.textContent = result.message;
-                addBotForm.reset();
-            } catch (error) {
-                updateContent.textContent = `ERRO AO ADICIONAR O BOT:\n\n${error.message}`;
-            } finally {
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
-            }
-        });
-        
-        document.querySelectorAll('.close-modal-btn').forEach(btn => { btn.addEventListener('click', (e) => { const modal = e.target.closest('.modal-overlay'); if (modal.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } modal.style.display = 'none'; }); });
-        window.addEventListener('click', (event) => { if (event.target.classList.contains('modal-overlay')) { if (event.target.id === 'log-modal' && currentLogSocket) { currentLogSocket.close(); currentLogSocket = null; } event.target.style.display = 'none'; } });
-        document.getElementById('logout-btn').addEventListener('click', async () => { if (await showConfirmation('Encerrar Sessão', 'Deseja realmente encerrar a sessão?')) { try { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; } catch (error) { showNotification('Erro', 'Falha ao fazer logout.', 'error'); } } });
-        
-        document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { 
-            event.preventDefault(); 
-            const submitButton = event.target.querySelector('button[type="submit"]');
-            const originalButtonText = submitButton.innerHTML;
-            submitButton.disabled = true;
-            submitButton.innerHTML = `<span class="loading-spinner"></span>Salvando...`;
-
-            const notification = { 
-                id: document.getElementById('notification-id').value, 
-                name: document.getElementById('notification-name').value, 
-                purpose: document.getElementById('notification-purpose').value,
-                token: document.getElementById('notification-token').value, 
-                chatId: document.getElementById('notification-chat-id').value 
-            }; 
-            try { 
-                const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { 
+                const result = await fetchWithAuth('/api/bots/notifications/test', {
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ notification: notification }) 
-                }); 
-                document.getElementById('edit-notification-modal').style.display = 'none'; 
-                showNotification('Sucesso', result.message); 
-                showNotificationManager(currentBotForNotifications.name); 
-            } catch (error) { 
-                showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); 
+                    body: JSON.stringify({ 
+                        token: token, 
+                        chatId: chatId, 
+                        message: `Olá! Esta é uma mensagem de teste enviada do seu Painel de Controlo para a notificação "${name}".` 
+                    })
+                });
+                showNotification('Sucesso', result.message);
+            } catch (error) {
+                showNotification('Falha no Teste', `ERRO: ${error.message}`, 'error');
             } finally {
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
+                setLoading(button, false);
             }
-        });
+        }
 
-        document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
+        async function deleteNotification(notificationId, notificationName, button) {
+            setLoading(button, true, 'Removendo...');
+            if (!currentBotForNotifications) return;
+            const { name: botName } = currentBotForNotifications;
+
+            const confirmed = await showConfirmation('Confirmar Remoção', `Tem a certeza que deseja remover a notificação "${notificationName}"?`, button);
+            if (!confirmed) return;
+            
+            setLoading(button, true, 'Removendo...');
+            try {
+                const url = `/api/bots/notifications/${encodeURIComponent(botName)}/${encodeURIComponent(notificationId)}`;
+                const result = await fetchWithAuth(url, { method: 'DELETE' });
+                showNotification('Sucesso', result.message);
+                showNotificationManager(botName);
+            } catch (error) {
+                showNotification('Falha ao Remover', `ERRO: ${error.message}`, 'error');
+                setLoading(button, false);
+            }
+        }
+
+        async function injectNotifierCode(button) {
+            setLoading(button, true, 'Aplicando...');
+            if (!currentBotForNotifications) return;
+            const { name } = currentBotForNotifications;
+
+            const confirmed = await showConfirmation('Confirmar Correção Automática', `Isto irá adicionar a linha de código necessária no topo do ficheiro principal do bot <b>${name}</b> e reiniciá-lo.\n\nDeseja continuar?`, button);
+            if (!confirmed) return;
+            
+            setLoading(button, true, 'Aplicando...');
+            try {
+                const result = await fetchWithAuth(`/api/bots/inject-notifier/${name}`, { method: 'POST' });
+                showNotification('Sucesso', result.message);
+            } catch (error) {
+                showNotification('Falha ao Aplicar Correção', `ERRO: ${error.message}`, 'error');
+            } finally {
+                showNotificationManager(name);
+            }
+        }
         
-        const toggleTokenBtn = document.getElementById('toggle-token-visibility');
-        const tokenInput = document.getElementById('notification-token');
-        const iconEye = toggleTokenBtn.querySelector('.icon-eye');
-        const iconEyeOff = toggleTokenBtn.querySelector('.icon-eye-off');
-        toggleTokenBtn.addEventListener('click', () => {
-            const isPassword = tokenInput.type === 'password';
-            tokenInput.type = isPassword ? 'text' : 'password';
-            iconEye.style.display = isPassword ? 'none' : 'block';
-            iconEyeOff.style.display = isPassword ? 'block' : 'none';
+        function renderBot(bot) {
+            const isOnline = bot.pm2_env.status === 'online';
+            const statusClass = isOnline ? 'status-online' : 'status-offline';
+            const memory = (bot.monit.memory / 1024 / 1024).toFixed(1);
+            const statusText = isOnline ? 'ATIVO' : bot.pm2_env.status.toUpperCase();
+
+            return `
+                <div class="bot-card" data-bot-name="${bot.name}">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>${bot.name}</h2>
+                            <div class="status-indicator ${statusClass}"><span>${statusText}</span></div>
+                        </div>
+                        <div class="card-header-actions">
+                            <button class="action-btn-icon danger delete-bot-btn" title="Excluir Bot">
+                                <i data-feather="trash-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="data-field"><span class="label">CARGA DE CPU</span> <span>${bot.monit.cpu}%</span></p>
+                        <p class="data-field"><span class="label">USO DE MEMÓRIA</span> <span>${memory} MB</span></p>
+                        <p class="data-field"><span class="label">REINICIALIZAÇÕES</span> <span>${bot.pm2_env.restart_time}</span></p>
+                    </div>
+                    <div class="card-actions">
+                        <button class="action-btn-card manage-bot-btn" data-action="start" ${isOnline ? 'disabled' : ''}>Iniciar</button>
+                        <button class="action-btn-card manage-bot-btn" data-action="restart" ${!isOnline ? 'disabled' : ''}>Reiniciar</button>
+                        <button class="action-btn-card stop manage-bot-btn" data-action="stop" ${!isOnline ? 'disabled' : ''}>Parar</button>
+                    </div>
+                    <div class="card-footer-actions">
+                        <button class="action-btn-footer reset-session-btn" title="Adicionar novo número de WhatsApp"><i data-feather="zap"></i>Add Nº Novo</button>
+                        <button class="action-btn-footer manage-notifications-btn" title="Gerir Notificações do Telegram"><i data-feather="bell"></i>Notificações</button>
+                        <button class="action-btn-footer upload-env-btn" title="Enviar Ficheiro .env"><i data-feather="upload-cloud"></i>Enviar .env</button>
+                        <button class="action-btn-footer show-logs-btn" title="Ver Logs"><i data-feather="terminal"></i>Logs</button>
+                        <button class="action-btn-footer update-source-btn" title="Atualizar a partir do Git"><i data-feather="git-pull-request"></i>Atualizar</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function loadBots(bots = []) {
+            const botListContainer = document.getElementById('bot-list');
+            if (bots && bots.length > 0) {
+                botListContainer.innerHTML = bots.map(renderBot).join('');
+            } else {
+                botListContainer.innerHTML = '<div class="bot-card"><p class="info-message">[NENHUM PROCESSO ENCONTRADO]</p></div>';
+            }
+            feather.replace();
+        }
+        
+        function connectDashboardSocket() {
+            const statusElement = document.getElementById('connection-status');
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
+            
+            dashboardSocket = new WebSocket(wsUrl);
+
+            dashboardSocket.onopen = () => { statusElement.textContent = 'Conectado'; statusElement.style.color = 'var(--green)'; };
+            dashboardSocket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'statusUpdate') loadBots(message.data);
+                    if (message.type === 'progress') {
+                        const logContent = document.getElementById('log-content');
+                        if (logContent && logContent.closest('.modal-overlay').style.display === 'flex') {
+                            logContent.textContent += message.message + '\n';
+                            logContent.parentElement.scrollTop = logContent.parentElement.scrollHeight;
+                        }
+                    }
+                } catch (e) { console.error('Failed to parse WebSocket message:', e); }
+            };
+            dashboardSocket.onclose = () => {
+                statusElement.textContent = 'Desconectado. Tentando reconectar...';
+                statusElement.style.color = 'var(--red)';
+                setTimeout(connectDashboardSocket, 3000);
+            };
+            dashboardSocket.onerror = (error) => {
+                statusElement.textContent = 'Erro de Conexão';
+                statusElement.style.color = 'var(--red)';
+                console.error('WebSocket Error:', error);
+                dashboardSocket.close();
+            };
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const botListContainer = document.getElementById('bot-list');
+            const notificationListContainer = document.getElementById('notification-list-container');
+
+            botListContainer.addEventListener('click', (event) => {
+                const button = event.target.closest('button');
+                if (!button) return;
+                const card = button.closest('.bot-card');
+                const botName = card.dataset.botName;
+
+                if (button.classList.contains('manage-bot-btn')) manageBot(botName, button.dataset.action, button);
+                if (button.classList.contains('delete-bot-btn')) deleteBot(botName, button);
+                if (button.classList.contains('reset-session-btn')) resetBotSession(botName, button);
+                if (button.classList.contains('manage-notifications-btn')) showNotificationManager(botName);
+                if (button.classList.contains('upload-env-btn')) uploadEnvFile(botName);
+                if (button.classList.contains('show-logs-btn')) showLogs(botName);
+                if (button.classList.contains('update-source-btn')) showUpdateModal(botName);
+            });
+            
+            notificationListContainer.addEventListener('click', (event) => {
+                const button = event.target.closest('button');
+                if (!button) return;
+                if (button.classList.contains('test-notification-btn')) {
+                    const { name, token, chatId } = button.dataset;
+                    testNotification(name, token, chatId, button);
+                }
+                if (button.classList.contains('edit-notification-btn')) {
+                    const notificationData = JSON.parse(button.dataset.notification);
+                    showEditNotificationModal(notificationData);
+                }
+                if (button.classList.contains('delete-notification-btn')) {
+                    const { notificationId, notificationName } = button.dataset;
+                    deleteNotification(notificationId, notificationName, button);
+                }
+                if (button.closest('.info-message.warning')) {
+                    injectNotifierCode(button.closest('.info-message.warning').querySelector('button'));
+                }
+            });
+            
+            document.getElementById('edit-notification-form').addEventListener('submit', async (event) => { 
+                event.preventDefault(); 
+                const submitButton = event.target.querySelector('button[type="submit"]');
+                setLoading(submitButton, true, 'Salvando...');
+
+                const notification = { 
+                    id: document.getElementById('notification-id').value, 
+                    name: document.getElementById('notification-name').value, 
+                    purpose: document.getElementById('notification-purpose').value,
+                    token: document.getElementById('notification-token').value, 
+                    chatId: document.getElementById('notification-chat-id').value 
+                }; 
+                try { 
+                    const result = await fetchWithAuth(`/api/bots/notifications/${currentBotForNotifications.name}`, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ notification: notification }) 
+                    }); 
+                    document.getElementById('edit-notification-modal').style.display = 'none'; 
+                    showNotification('Sucesso', result.message); 
+                    showNotificationManager(currentBotForNotifications.name); 
+                } catch (error) { 
+                    showNotification('Falha ao Salvar', `ERRO: ${error.message}`, 'error'); 
+                } finally {
+                    setLoading(submitButton, false);
+                }
+            });
+
+            document.getElementById('add-new-notification-btn').addEventListener('click', () => { showEditNotificationModal(); });
+            const toggleTokenBtn = document.getElementById('toggle-token-visibility');
+            const tokenInput = document.getElementById('notification-token');
+            const iconEye = toggleTokenBtn.querySelector('.icon-eye');
+            const iconEyeOff = toggleTokenBtn.querySelector('.icon-eye-off');
+            toggleTokenBtn.addEventListener('click', () => {
+                const isPassword = tokenInput.type === 'password';
+                tokenInput.type = isPassword ? 'text' : 'password';
+                iconEye.style.display = isPassword ? 'none' : 'block';
+                iconEyeOff.style.display = isPassword ? 'block' : 'none';
+            });
+            feather.replace();
+            connectDashboardSocket();
         });
-        
-        feather.replace();
-        connectDashboardSocket();
-    });
-</script>
+    </script>
 
 </body>
+
 </html>
