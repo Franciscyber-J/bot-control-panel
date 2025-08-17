@@ -18,6 +18,14 @@
         <header class="panel-header">
             <h1>Painel de Controlo de Bots</h1>
             <div class="header-controls">
+                <a href="https://habiticongyn.com/tutorial-telegram/" target="_blank" class="action-btn">
+                    <i data-feather="book-open" style="width: 16px; height: 16px; margin-right: 0.5rem;"></i>
+                    <span>Abrir Tutorial</span>
+                </a>
+                <button id="copy-tutorial-link-btn" class="action-btn">
+                    <i data-feather="copy" style="width: 16px; height: 16px; margin-right: 0.5rem;"></i>
+                    <span>Copiar Link</span>
+                </button>
                 <button id="add-bot-btn" class="action-btn primary">Adicionar Novo Bot</button>
                 <button id="logout-btn" class="action-btn">Logout</button>
             </div>
@@ -673,6 +681,30 @@
                     }
                 }
             });
+
+            // ### NOVA FUNÇÃO PARA COPIAR O LINK DO TUTORIAL ###
+            const copyTutorialBtn = document.getElementById('copy-tutorial-link-btn');
+            if (copyTutorialBtn) {
+                copyTutorialBtn.addEventListener('click', () => {
+                    const tutorialUrl = 'https://habiticongyn.com/tutorial-telegram/';
+                    navigator.clipboard.writeText(tutorialUrl).then(() => {
+                        const originalContent = copyTutorialBtn.innerHTML;
+                        copyTutorialBtn.innerHTML = `
+                            <i data-feather="check" style="width: 16px; height: 16px; margin-right: 0.5rem;"></i>
+                            <span>Copiado!</span>`;
+                        feather.replace();
+                        
+                        setTimeout(() => {
+                            copyTutorialBtn.innerHTML = originalContent;
+                            feather.replace();
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Falha ao copiar o link: ', err);
+                        showNotification('Erro', 'Não foi possível copiar o link.', 'error');
+                    });
+                });
+            }
+            // ### FIM DA NOVA FUNÇÃO ###
 
             botListContainer.addEventListener('click', (event) => {
                 const button = event.target.closest('button');
