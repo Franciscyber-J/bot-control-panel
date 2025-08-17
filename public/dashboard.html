@@ -191,7 +191,7 @@
     </div>
 
     <script>
-        // SCRIPT COMPLETO E CORRIGIDO - V11 (BOTÕES DE FECHAR CORRIGIDOS)
+        // SCRIPT COMPLETO E CORRIGIDO - V12 (BOTÕES DO CABEÇALHO RESTAURADOS)
 
         let currentLogSocket = null;
         let currentBotForNotifications = null;
@@ -663,12 +663,82 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            // ### INÍCIO DAS CORREÇÕES E ADIÇÕES ###
             const addBotModal = document.getElementById('add-bot-modal');
             const addBotForm = document.getElementById('add-bot-form');
             const botListContainer = document.getElementById('bot-list');
             const notificationListContainer = document.getElementById('notification-list-container');
+            const addBotBtn = document.getElementById('add-bot-btn');
+            const logoutBtn = document.getElementById('logout-btn');
 
-            // ### CORREÇÃO DO BOTÃO DE FECHAR AQUI ###
+            // Event listener para o botão de Adicionar Bot
+            addBotBtn.addEventListener('click', () => {
+                addBotForm.reset();
+                document.getElementById('env-file-status').textContent = 'Nenhum ficheiro selecionado.';
+                document.getElementById('add-bot-submit-btn').disabled = true;
+                newBotEnvContent = null;
+                addBotModal.style.display = 'flex';
+            });
+            
+            // Event listener para o botão de Logout
+            logoutBtn.addEventListener('click', async () => {
+                try {
+                    await fetchWithAuth('/api/logout', { method: 'POST' });
+                    window.location.href = '/';
+                } catch (error) {
+                    showNotification('Erro de Logout', `Não foi possível fazer logout: ${error.message}`, 'error');
+                }
+            });
+            
+            // Lógica para o formulário de Adicionar Bot
+            const uploadEnvBtn = document.getElementById('upload-env-btn-add');
+            const envFileInput = document.getElementById('bot-env-file-add');
+            const envFileStatus = document.getElementById('env-file-status');
+            const addBotSubmitBtn = document.getElementById('add-bot-submit-btn');
+
+            uploadEnvBtn.addEventListener('click', () => envFileInput.click());
+            envFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        newBotEnvContent = e.target.result;
+                        envFileStatus.textContent = `Ficheiro selecionado: ${file.name}`;
+                        envFileStatus.style.color = 'var(--green)';
+                        addBotSubmitBtn.disabled = false;
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            addBotForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const submitButton = event.target.querySelector('button[type="submit"]');
+                setLoading(submitButton, true, 'A adicionar...');
+
+                const botData = {
+                    name: document.getElementById('bot-name-add').value,
+                    gitUrl: document.getElementById('bot-git-url-add').value,
+                    envContent: newBotEnvContent
+                };
+
+                try {
+                    const result = await fetchWithAuth('/api/bots/add-from-git', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(botData)
+                    });
+                    addBotModal.style.display = 'none';
+                    showNotification('Sucesso', `Bot '${botData.name}' está a ser adicionado. Acompanhe os logs para ver o progresso.`);
+                    showLogs(botData.name, result.message);
+                } catch (error) {
+                    showNotification('Falha ao Adicionar', `ERRO: ${error.message}`, 'error');
+                } finally {
+                    setLoading(submitButton, false);
+                }
+            });
+            // ### FIM DAS CORREÇÕES E ADIÇÕES ###
+
             document.body.addEventListener('click', (event) => {
                 if (event.target.closest('.close-modal-btn')) {
                     const modal = event.target.closest('.modal-overlay');
@@ -682,7 +752,6 @@
                 }
             });
 
-            // ### NOVA FUNÇÃO PARA COPIAR O LINK DO TUTORIAL ###
             const copyTutorialBtn = document.getElementById('copy-tutorial-link-btn');
             if (copyTutorialBtn) {
                 copyTutorialBtn.addEventListener('click', () => {
@@ -704,7 +773,6 @@
                     });
                 });
             }
-            // ### FIM DA NOVA FUNÇÃO ###
 
             botListContainer.addEventListener('click', (event) => {
                 const button = event.target.closest('button');
